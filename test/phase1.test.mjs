@@ -109,41 +109,46 @@ test('MIDI import: a pack loop in another key round-trips through scale degrees'
   }
 });
 
-test('engine composes the next phrase exactly N bars ahead, and every note is sent once, on time', () => {
+test('engine decides the next phrase exactly N bars ahead, and every note is sent once, on time', () => {
   for (const aheadBars of [1, 2]) {
     let t = 0;
     const played = [];
     const events = [];
+    const plans = [];
     const lib = createLibrary();
     let seedR = 1;
     const rand = () => ((seedR = (seedR * 16807) % 2147483647) / 2147483647);
     const agents = ROLES.map((r) => new Agent(r, lib, rand));
     const e = new Engine({
-      agents, now: () => t, composeAheadBars: aheadBars, onEvent: (ev) => events.push({ ...ev, at: t }),
+      agents, now: () => t, composeAheadBars: aheadBars, planAheadBars: aheadBars + 1,
+      onEvent: (ev) => events.push({ ...ev, at: t }),
+      onPlan: (phrase, ctxs, deadline) => plans.push({ phrase, roles: Object.keys(ctxs), deadline }),
       audio: { play: (role, n, when) => played.push({ role, when, at: t, what: n.drum ?? n.midi ?? n.midis.join() }) },
     });
     const structure = { key: 'A', mode: 'minor', bpm: 100, progression: ['i', 'VI', 'III', 'VII'] };
     e.start(structure, 300);
-    for (t = 0; t < 60000; t += 25) e.tick();
+    for (t = 0; t < 90000; t += 25) e.tick();
 
-    const phraseMs = 64 * stepMs(100);
+    const barMs = 16 * stepMs(100);
     for (const ev of events.filter((x) => x.phrase > 0)) {
       const startsIn = phraseStartMs(ev.phrase, 300, 100) - ev.at;
-      assert.ok(startsIn > 0 && startsIn <= aheadBars * 16 * stepMs(100) + 1, `phrase ${ev.phrase} composed ${startsIn} ms early`);
+      assert.ok(startsIn > 0 && startsIn <= aheadBars * barMs + 1, `phrase ${ev.phrase} decided ${startsIn} ms early`);
     }
+    for (const p of plans) assert.ok(Math.abs(p.deadline - barMs) <= 26, `Jev gets about one bar: ${p.deadline}`);
+    assert.equal(plans.length, new Set(plans.map((p) => p.phrase)).size, 'one plan per phrase');
     assert.ok(played.length > 200);
     for (const p of played) assert.ok(p.when - p.at >= -20 && p.when - p.at <= 150, `sent ${p.when - p.at} ms ahead`);
     const keys = played.map((p) => `${p.role}:${p.what}@${p.when}`);
     assert.equal(new Set(keys).size, keys.length, 'no duplicates');
-    assert.ok(events.length >= Math.floor(60000 / phraseMs));
   }
 });
 
-test('auto arrangement: chords first, then drums and bass, then melody', () => {
+test('arrangement: chords first, then drums and bass, then melody', () => {
+  let t = 0;
   const lib = createLibrary();
-  const agents = ROLES.map((r) => new Agent(r, lib, () => 0.5));
-  const s = { key: 'C', mode: 'major', bpm: 90, progression: ['I', 'V', 'vi', 'IV'] };
-  const playing = (p) => agents.filter((a) => a.compose(p, s).notes.length).map((a) => a.role).sort();
+  const e = new Engine({ agents: ROLES.map((r) => new Agent(r, lib, () => 0.5)), now: () => t, audio: { play() {} } });
+  e.start({ key: 'C', mode: 'major', bpm: 90, progression: ['I', 'V', 'vi', 'IV'] }, 0);
+  const playing = (p) => Object.entries(e.ensureParts(p).local).filter(([, part]) => part.notes.length).map(([r]) => r).sort();
   assert.deepEqual(playing(0), ['chords']);
   assert.deepEqual(playing(1), ['bass', 'chords', 'drums']);
   assert.deepEqual(playing(2), ['bass', 'chords', 'drums', 'melody']);

@@ -10,6 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
+import { decide, direct, aiStatus } from './ai.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8000);
@@ -30,10 +31,26 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === '/info') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ lanUrl: LAN_URL }));
+    return res.end(JSON.stringify({ lanUrl: LAN_URL, ai: aiStatus() }));
+  }
+  if (req.method === 'POST' && (url.pathname === '/decide' || url.pathname === '/direct')) {
+    try {
+      let raw = '';
+      for await (const chunk of req) {
+        raw += chunk;
+        if (raw.length > 200000) throw new Error('request too large');
+      }
+      const out = await (url.pathname === '/decide' ? decide : direct)(JSON.parse(raw));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(out));
+    } catch (err) {
+      log(`${url.pathname} failed: ${err.message}`);
+      res.writeHead(502, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ error: String(err.message).slice(0, 200) }));
+    }
   }
   const file = path.normalize(path.join(ROOT, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname)));
-  if (!file.startsWith(ROOT) || file.includes(`${path.sep}node_modules${path.sep}`) || file.includes(`${path.sep}.git`)) {
+  if (!file.startsWith(ROOT) || file.includes(`${path.sep}node_modules${path.sep}`) || file.includes(`${path.sep}.git`) || path.basename(file).startsWith('.env')) {
     res.writeHead(403);
     return res.end();
   }
@@ -85,5 +102,8 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`    this computer: http://localhost:${PORT}`);
   console.log(`    phones:        ${LAN_URL}  (same Wi-Fi)\n`);
   try { console.log(await QRCode.toString(LAN_URL, { type: 'terminal', small: true })); } catch {}
+  const ai = aiStatus();
+  console.log(`  Jev: ${ai.jev === 'jev' ? 'live (JEV_API_KEY)' : 'stand-in (set JEV_API_KEY for the real model)'}`);
+  console.log(`  Director: ${ai.director === 'llm' ? 'live LLM (ANTHROPIC_API_KEY)' : 'stand-in (set ANTHROPIC_API_KEY for a real LLM)'}\n`);
   console.log('  Ctrl+C stops the server. Devices already connected keep playing.\n');
 });

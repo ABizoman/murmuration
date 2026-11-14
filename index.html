@@ -39,7 +39,7 @@
   #qr img { width:100%; display:block; }
   #lanUrl { font:12px ui-monospace, monospace; color:var(--dim); word-break:break-all; margin-top:6px; }
   canvas { width:100%; display:block; }
-  #log { font:12px/1.5 ui-monospace, monospace; max-height:220px; overflow:auto; color:var(--dim); white-space:pre-wrap; }
+  #log { font:12px/1.5 ui-monospace, monospace; max-height:260px; overflow:auto; color:var(--dim); white-space:pre-wrap; }
   #log b { color:var(--text); }
   #me { font-size:22px; font-weight:700; }
 </style>
@@ -74,6 +74,11 @@
   </section>
 
   <section class="panel">
+    <h2>Direction (voted by the swarm) and decision help</h2>
+    <div id="direction"></div>
+  </section>
+
+  <section class="panel">
     <h2>Swarm</h2>
     <table id="peers"></table>
   </section>
@@ -84,7 +89,7 @@
   </section>
 
   <section class="panel">
-    <h2>Import MIDI pack loops (this device only for now)</h2>
+    <h2>Import MIDI pack loops (used by this device's agents)</h2>
     <div class="row">
       <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
       <label>Style <input id="mStyle" value="pack" size="7" /></label>

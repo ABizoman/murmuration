@@ -92,3 +92,21 @@ export function voiceChord(chord, size, prev, register = 0) {
   candidates.sort((a, b) => cost(a) - cost(b));
   return candidates[0];
 }
+
+// Root pitch of the chord at or below `pitch`.
+export function rootNear(pitch, chord) {
+  return pitch - ((((pitch - chord.rootPc) % 12) + 12) % 12);
+}
+
+// MIDI pitch -> diatonic index relative to rootRef (0 = root, 7 = root an octave up, -1 = step below).
+// Notes outside the chord/scale snap to the nearest degree.
+export function diatonicIndex(midi, chord, rootRef) {
+  const semis = (((midi - chord.rootPc) % 12) + 12) % 12;
+  let best = 0, bestDist = 99;
+  for (let d = 0; d < 7; d++) {
+    const iv = degreeInterval(d, chord);
+    const dist = Math.min(Math.abs(iv - semis), 12 - Math.abs(iv - semis)) + (d % 2 ? 0.1 : 0);
+    if (dist < bestDist) { best = d; bestDist = dist; }
+  }
+  return best + 7 * Math.round((midi - rootRef - degreeInterval(best, chord)) / 12);
+}

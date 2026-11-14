@@ -5,9 +5,12 @@ import { createLibrary, ROLES } from './loops.js';
 import { Agent } from './agent.js';
 import { Engine } from './engine.js';
 import { createAudio } from './audio.js';
-import { renderPhrase } from './render.js';
 import { importMidiFile } from './midi-import.js';
 import { Swarm } from './swarm/swarm.js';
+import { Jev } from './decide/jev.js';
+import { Director, sectionOf, SECTION_PHRASES } from './decide/director.js';
+import { describeDirective, DEFAULT_DIRECTIVE } from './decide/directive.js';
+import { summarise, describePart } from './decide/context.js';
 
 const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
@@ -30,15 +33,58 @@ const swarm = new Swarm({
     roles: (roles) => {
       const gained = [...roles].filter((r) => !engine.myRoles.has(r));
       engine.myRoles = new Set(roles);
-      // Taking a part over mid-phrase: tell everyone what we'll play for the phrases already composed.
-      for (const [phrase, entry] of engine.phrases) for (const r of gained) swarm.publishPart(phrase, r, entry.local[r]);
-      if (gained.length) log(`now also sounding <b>${gained.join(', ')}</b>`);
+      syncDoubling();
+      if (gained.length && engine.myRoles.size > gained.length) log(`now also sounding <b>${gained.join(', ')}</b>`);
       renderAgents();
     },
+    message: (body, origin) => {
+      if (body.type === 'proposal') director.onProposal(body);
+      else if (body.type === 'endorse') director.onEndorse(body, origin);
+    },
+    welcome: (b) => b.direction && director.adoptFromPeer(b.direction),
     part: onRemotePart,
     change: renderSwarm,
   },
+  welcomeExtra: () => {
+    const pos = engine.position();
+    return { direction: pos ? director.current(Math.max(0, pos.phrase) + 1) : null };
+  },
 });
+
+// Jev: typed questions about the shared score, answered through the laptop's relay.
+const jev = new Jev({ library, onChange: renderDirection });
+
+// Director: any device may propose a direction for the next section; the swarm votes.
+const director = new Director({
+  id: swarm.id,
+  now: () => swarm.clock.now(),
+  publish: (body) => swarm.publish(body),
+  liveCount: () => Math.max(1, swarm.liveIds().length),
+  request: async (state) => {
+    const res = await fetch('/direct', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
+    if (!res.ok) throw new Error(`relay answered ${res.status}`);
+    return res.json();
+  },
+  log,
+  onChange: renderDirection,
+});
+
+function syncDoubling() {
+  const why = swarm.view().whyMine;
+  engine.doubling = new Set(Object.keys(why).filter((r) => why[r] === 'doubling'));
+}
+
+// What the director LLM reads: the last few phrases, one line per part.
+function describeForDirector(phrase) {
+  const section = sectionOf(phrase) + 1;
+  const lines = [`Song: ${$('structure').textContent}. You are setting the direction for section ${section + 1} (phrases ${section * SECTION_PHRASES + 1}-${(section + 1) * SECTION_PHRASES}).`];
+  lines.push(`Current direction: ${describeDirective(director.directiveFor(phrase))}.`);
+  for (let p = Math.max(0, phrase - 3); p < phrase; p++) {
+    lines.push(`Phrase ${p + 1}:`);
+    for (const r of ROLES) lines.push(`- ${r}: ${describePart(summarise(engine.lookup(p, r), r, p))}`);
+  }
+  return lines.join('\n');
+}
 
 const engine = new Engine({
   agents,
@@ -46,6 +92,12 @@ const engine = new Engine({
   // The engine schedules in shared time; Web Audio needs this device's local time.
   audio: { play: (role, n, when, dur) => realAudio?.play(role, n, when - swarm.clock.offset, dur) },
   onEvent,
+  onPlan: (phrase, ctxs, deadlineMs) => {
+    jev.plan(phrase, ctxs, deadlineMs);
+    director.maybePropose(phrase, () => describeForDirector(phrase));
+  },
+  getAdvice: (phrase, role) => jev.advice(phrase, role),
+  getDirective: (phrase) => director.directiveFor(phrase),
 });
 engine.myRoles = new Set();
 
@@ -63,6 +115,7 @@ function playSong(song) {
   const structure = showStructure(song.seed);
   $('seed').value = song.seed;
   engine.start(structure, song.startMs);
+  syncDoubling();
   clearInterval(tickTimer);
   tickTimer = setInterval(() => engine.tick(), 25);
 }
@@ -114,30 +167,56 @@ function updateButton() {
 // --- Parts going out and coming in ------------------------------------------------
 
 function onEvent(ev) {
-  if (ev.type !== 'composed') return;
-  for (const role of ev.mine) swarm.publishPart(ev.phrase, role, ev.parts[role]);
+  if (ev.type !== 'part') return;
+  ev.part.by = swarm.id;
+  swarm.publishPart(ev.phrase, ev.role, ev.part);
+  const reasons = ev.part.notes.length && ev.part.reasons?.length ? ` — ${ev.part.reasons.join('; ')}` : '';
+  log(`phrase ${ev.phrase + 1} <span style="color:${COLORS[ev.role]}">${ev.role}</span>: ${esc(ev.part.why)} [${esc(ev.part.source)}]${esc(reasons)}`);
   renderAgents();
 }
 
+function validNotes(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 400).filter((n) => n && Number.isInteger(n.step) && n.step >= 0 && n.step < 64 && n.dur > 0 &&
+    (typeof n.drum === 'string' || Number.isFinite(n.midi) || (Array.isArray(n.midis) && n.midis.every(Number.isFinite))));
+}
+
 function onRemotePart(body, origin) {
-  if (!engine.structure) return;
-  let part;
-  const loop = body.loopId && library.loops.find((l) => l.id === body.loopId);
-  if (!body.loopId) part = { notes: [], why: `${body.why} · ${origin}` };
-  else if (!loop) part = { notes: [], why: `${body.loopId} (not in my library) · ${origin}` };
-  else {
-    const { notes } = renderPhrase(loop, { structure: engine.structure, phrase: body.phrase, register: body.register || 0 });
-    part = { notes, loop, why: `${body.loopId} · played by ${origin}` };
-  }
-  engine.setRemotePart(body.phrase, body.role, part);
+  if (!engine.structure || !ROLES.includes(body.role) || !Number.isInteger(body.phrase)) return;
+  const d = body.d && typeof body.d === 'object' ? body.d : {};
+  engine.setRemotePart(body.phrase, body.role, {
+    notes: validNotes(body.notes),
+    d: { level: Number(d.level) || 0, style: String(d.style ?? ''), register: Number(d.register) || 0, interaction: String(d.interaction ?? 'none') },
+    by: origin,
+    source: String(body.source ?? ''),
+    why: `${String(body.why ?? '').slice(0, 120)} · played by ${origin}`,
+  });
 }
 
 // --- Agent cards --------------------------------------------------------------------
+
+function detail(part) {
+  if (!part || !part.p) return part?.source ? `decided with ${part.source}` : '';
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  return `${part.source} · sure: busy ${pct(part.p.level)}, pattern ${pct(part.p.style)}, react ${pct(part.p.interaction)}`;
+}
+
+function renderDirection() {
+  const pos = engine.position();
+  const cur = pos ? director.current(Math.max(0, pos.phrase)) : null;
+  const d = cur?.directive || DEFAULT_DIRECTIVE;
+  const j = jev.stats;
+  $('direction').innerHTML =
+    `<div><b>${esc(describeDirective(d))}</b>${d.note ? ` — “${esc(d.note)}”` : ''}</div>` +
+    `<div class="why">${cur ? `section ${cur.section + 1}, proposed by ${esc(cur.by)} (${esc(cur.source)})${cur.votes ? `, ${cur.votes} votes` : ''}` : 'no direction adopted yet: default'} · director here: ${esc(director.status)}</div>` +
+    `<div class="why">Jev: ${esc(j.state)}${j.source ? ` (${esc(j.source)})` : ''} · answered in time ${j.inTime}/${j.asked}${j.late ? `, too late ${j.late}` : ''}${j.failed ? `, failed ${j.failed}` : ''}${j.lastMs != null ? ` · last ${j.lastMs} ms` : ''}</div>`;
+}
 
 function renderAgents() {
   const players = swarm.view().players;
   const pos = engine.position();
   const parts = pos ? engine.partsFor(Math.max(0, pos.phrase)) : null;
+  const lvl = (a) => (a.auto || !engine.myRoles.has(a.role) ? parts?.[a.role]?.d?.level ?? a.level : a.level);
   $('agents').innerHTML = agents
     .map((a) => {
       const who = players[a.role].map((p) => `${p.id === swarm.id ? 'me' : p.id} (${p.why})`).join(', ') || 'nobody';
@@ -145,11 +224,12 @@ function renderAgents() {
       return `<div class="agent ${mine ? 'mine' : ''}" data-role="${a.role}">
         <div class="name"><span style="color:${COLORS[a.role]}">${a.role}</span><span class="who">${esc(who)}</span></div>
         <div class="row">
-          <label>Busy <input type="range" data-k="level" min="0" max="3" value="${a.level}" ${a.auto ? 'disabled' : ''}/> ${LEVELS[a.level]}</label>
+          <label>Busy <input type="range" data-k="level" min="0" max="3" value="${lvl(a)}" ${a.auto || !mine ? 'disabled' : ''}/> ${LEVELS[lvl(a)]}</label>
           <label><input type="checkbox" data-k="auto" ${a.auto ? 'checked' : ''}/> auto</label>
           <label>Reg <select data-k="register">${[-1, 0, 1].map((r) => `<option value="${r}" ${a.register === r ? 'selected' : ''}>${r > 0 ? '+' : ''}${r}</option>`).join('')}</select></label>
         </div>
         <div class="why">${esc(parts?.[a.role]?.why ?? '')}</div>
+        <div class="why">${esc(detail(parts?.[a.role]))}</div>
       </div>`;
     })
     .join('');
@@ -189,7 +269,9 @@ function renderSwarm() {
       <td>${swarm.claim?.role ?? '–'}</td><td>${[...engine.myRoles].join(' + ') || '–'}</td></tr>` +
     rows;
   updateButton();
+  syncDoubling();
   renderAgents();
+  renderDirection();
 }
 
 fetch('/info').then((r) => r.json()).then((i) => ($('lanUrl').textContent = i.lanUrl)).catch(() => {});
@@ -245,7 +327,7 @@ function drawPhrase(parts, y0, h, playhead) {
   if (!parts) {
     ctx.fillStyle = '#8a90a0';
     ctx.font = `${14 * dpr}px system-ui`;
-    ctx.fillText(swarm.playing ? `composed ${engine.composeAheadBars} bar before it starts` : 'press Start or Join', 12 * dpr, y0 + h / 2);
+    ctx.fillText(swarm.playing ? `decided ${engine.composeAheadBars} bar before it starts` : 'press Start or Join', 12 * dpr, y0 + h / 2);
     return;
   }
   ROLES.forEach((role, i) => {
@@ -293,7 +375,7 @@ function frame() {
 requestAnimationFrame(frame);
 
 // For tests and debugging in the console.
-window.murmuration = { swarm, engine };
+window.murmuration = { swarm, engine, jev, director };
 
 swarm.start();
 renderSwarm();

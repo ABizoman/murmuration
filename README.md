@@ -12,6 +12,33 @@ Press **Start a song** on the first device; every other device shows **Join the 
 
 `npm test` runs the unit tests (Node only, no browser).
 
+## Phase 3: agents deciding from what their peers did
+
+For every phrase, each agent makes four choices from the shared score (what every part played last phrase):
+how busy, which pattern, which register, and whether to echo or answer another part.
+
+| layer | file | what it does |
+|---|---|---|
+| Shared score | `src/decide/context.js`, `src/engine.js` | Parts are gossiped with their notes, so every device holds the same score. Agents keep no private history: a device that takes a part over continues from what the last player did. |
+| 16. Offline rules | `src/decide/rules.js` | A weight for every option. Balance busyness around the band's target, leave room when the melody is busy, avoid a register someone is in, keep a pattern for a while then change, reply when addressed. Always available. |
+| 17. Jev | `src/decide/jev.js`, `ai.js` | Two bars before a phrase, the score goes to Jev with one yes/no question per option. If the probabilities are back before the agents decide (one bar before), they are blended in; otherwise the rules decide alone. |
+| Final choice | `src/decide/select.js` | Statistical: rule weight × Jev probability, then sample. The screen shows how sure each choice was and which sources were used. |
+| 18. Echo / answer | `src/decide/transform.js` | Echo copies a part's rhythm (kick locks to the bass, chords comp the melody) or, between bass and melody, its rhythm and contour in the new register. Answer plays in the gaps the other part leaves; a melody answers a melodic gesture with its mirror image half a bar later. |
+| Director | `src/decide/director.js`, `ai.js` | Every 4 phrases any device may ask an LLM for a direction (energy, featured part, who drops out, who echoes/answers whom). Proposals are gossiped; a device follows one once more than half of the live devices endorse it. It only shifts rule weights. |
+
+### API keys
+Keys stay on the laptop, read from the environment by `server.js`:
+```
+JEV_API_KEY=...        node server.js    # real Jev (JEV_URL to change the endpoint)
+ANTHROPIC_API_KEY=...  node server.js    # real LLM director (DIRECTOR_MODEL to change the model)
+```
+Without a key, each route answers with a **stand-in that is not a model** (pseudo-random preferences for Jev, a fixed energy arc for the director),
+labelled as such on screen, so the deadlines, blending and voting can be tested. `decideReal()` in `ai.js` was written from public
+descriptions of the Jev API and has not been run against it: check the request and answer field names with your first key.
+
+### When the network goes
+Server killed or phone in airplane mode: Jev and the director become unreachable, decisions show `[rules]`, and the last adopted direction stays in force.
+
 ## Phase 2: agents talking
 
 | step | file | what it does |
@@ -38,7 +65,6 @@ the server was killed and gossip kept flowing; a closed tab's drums were picked 
 - Phones need to reach each other directly on the Wi-Fi. Networks with client isolation (eduroam, many venue networks) block this: bring a hotspot or travel router.
 - Pages are served over plain http, so the screen wake lock isn't available: keep phones awake by hand.
 - A device that comes back after the server is gone can't reconnect (needs signalling through the mesh: later phase).
-- Imported MIDI loops only exist on the device that imported them; other devices show "not in my library".
 
 ## Phase 1: one device
 `src/seed.js` (seed → key, mode, tempo, progression), `src/clock.js` (phrase/bar/step from time), `src/loops.js` (loops in scale degrees),

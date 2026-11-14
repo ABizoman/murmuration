@@ -29,7 +29,8 @@ export function songWins(a, b) {
 const sameSong = (a, b) => a && b && a.seed === b.seed && Math.abs(a.startMs - b.startMs) < 1;
 
 export class Swarm {
-  constructor({ localNow, signalUrl, getPosition, events }) {
+  constructor({ localNow, signalUrl, getPosition, events, welcomeExtra = () => ({}) }) {
+    this.welcomeExtra = welcomeExtra;
     this.id = makeId();
     this.ev = events; // { log, song, roles, part, change }
     this.getPosition = getPosition;
@@ -94,11 +95,12 @@ export class Swarm {
   }
 
   publishPart(phrase, role, part) {
-    if (!part.loop) {
-      this.gossip.publish({ type: 'part', phrase, role, loopId: null, why: part.why });
-      return;
-    }
-    this.gossip.publish({ type: 'part', phrase, role, loopId: part.loop.id, register: part.register || 0, why: part.why });
+    // The notes travel with the choice, so every device can show (and react to) the real part.
+    this.gossip.publish({ type: 'part', phrase, role, d: part.d, why: part.why, source: part.source, notes: part.notes });
+  }
+
+  publish(body) {
+    this.gossip.publish(body);
   }
 
   // ---- incoming ---------------------------------------------------------------
@@ -140,7 +142,7 @@ export class Swarm {
     const { owners: own } = assignment(this.claims(), this.liveIds());
     const taken = Object.fromEntries(Object.entries(own).filter(([, c]) => c).map(([r, c]) => [r, c.id]));
     const free = Object.keys(own).filter((r) => !own[r]);
-    this.mesh.send(from, { d: 1, body: { type: 'welcome', from: this.id, song: this.song, at: pos, taken, free } });
+    this.mesh.send(from, { d: 1, body: { type: 'welcome', from: this.id, song: this.song, at: pos, taken, free, ...this.welcomeExtra() } });
   }
 
   onWelcome(from, b) {
@@ -150,6 +152,7 @@ export class Swarm {
         `taken: ${taken}; free: ${b.free.join(', ') || 'none'}`,
     );
     this.considerSong(b.song, from);
+    this.ev.welcome?.(b, from);
   }
 
   onGossip(body, origin) {
@@ -168,6 +171,8 @@ export class Swarm {
       this.ev.change();
     } else if (body.type === 'part') {
       this.ev.part(body, origin);
+    } else {
+      this.ev.message?.(body, origin);
     }
   }
 
@@ -270,6 +275,7 @@ export class Swarm {
   view() {
     const { players } = assignment(this.claims(), this.liveIds());
     return {
+      whyMine: Object.fromEntries(Object.entries(players).flatMap(([r, list]) => list.filter((p) => p.id === this.id).map((p) => [r, p.why]))),
       id: this.id,
       server: this.server,
       offset: this.clock.offset,
