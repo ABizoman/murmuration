@@ -10,11 +10,11 @@ export function chordAt(structure, phrase, barInPhrase) {
 }
 
 // Returns { notes: [{ step, dur, vel, midi? | midis? | drum? }], voicing } where step is 0..63 in the phrase.
-export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicing = null }) {
+export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicing = null, fold = true }) {
   const notes = [];
   let voicing = prevVoicing;
   for (let bar = 0; bar < BARS_PER_PHRASE; bar++) {
-    const lb = bar % loop.bars;
+    const lb = (phrase * BARS_PER_PHRASE + bar) % loop.bars; // 8-bar loops span two phrases
     const chord = chordAt(structure, phrase, bar);
     const events = loop.events.filter((e) => e.bar === lb);
     if (loop.role === 'chords' && events.length) voicing = voiceChord(chord, loop.voicing || 3, voicing, register);
@@ -25,10 +25,10 @@ export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicin
       if (loop.role === 'drums') notes.push({ ...base, drum: e.drum });
       else if (loop.role === 'chords') notes.push({ ...base, midis: voicing });
       else {
-        let midi = degreeToMidi(e.deg, e.oct, chord, anchor);
+        let midi = degreeToMidi(e.deg, e.oct, chord, anchor) + (e.acc || 0);
         // keep pack lines that wander far from the anchor in a playable range
-        if (loop.role === 'bass') while (midi < 28) midi += 12;
-        while (midi > 100) midi -= 12;
+        if (fold && loop.role === 'bass') while (midi < 28) midi += 12;
+        if (fold) while (midi > 100) midi -= 12;
         notes.push({ ...base, midi });
       }
     }

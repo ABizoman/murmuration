@@ -45,7 +45,10 @@ export function ruleScores(ctx, library) {
 
   // ---- 1. How busy --------------------------------------------------------------
   let level;
-  if (ctx.phrase < ENTRY[role]) {
+  const song = ctx.structure?.song;
+  if (song) {
+    level = songLevel(ctx, song, dir, active, last, reasons);
+  } else if (ctx.phrase < ENTRY[role]) {
     level = { 0: 1 };
     reasons.push({ text: 'waiting for my entry' });
   } else if (dir.drop === role) {
@@ -98,7 +101,7 @@ export function ruleScores(ctx, library) {
 
   // ---- 3. Which register --------------------------------------------------------
   const register = {};
-  for (const r of REGISTERS[role]) {
+  for (const r of song ? [0] : REGISTERS[role]) {
     let w = REGISTER_PRIOR[role]?.[r] ?? 1;
     if (role !== 'drums') {
       const centre = CENTRE[role] + 12 * r;
@@ -117,7 +120,7 @@ export function ruleScores(ctx, library) {
 
   // ---- 4. Echo or answer someone ------------------------------------------------
   const interaction = { none: last ? 1.2 : 2.4 };
-  for (const [opt, affinity] of Object.entries(AFFINITY[role] || {})) {
+  for (const [opt, affinity] of Object.entries(song && !song.react ? {} : AFFINITY[role] || {})) {
     const [mode, target] = opt.split(':');
     const p = peers[target];
     if (!p || !p.notes.length || p.level === 0) continue;
@@ -137,17 +140,18 @@ export function ruleScores(ctx, library) {
   // ---- 5. Which instrument (only at the start of a section) ----------------------
   const voice = {};
   const current = last?.voice && voiceById[last.voice] ? last.voice : null;
-  if (current && ctx.phrase % SECTION_PHRASES !== 0) {
+  if (current && ctx.phrase % SECTION_PHRASES !== 0 && (!song?.voices?.[role] || song.voices[role].includes(current))) {
     voice[current] = 1; // keep it until the next section
   } else {
     const held = current ? Math.ceil(runLength(history, 'voice') / SECTION_PHRASES) : 0;
     const taken = active.filter((p) => p.voice && voiceById[p.voice]).map((p) => voiceById[p.voice]);
-    for (const v of VOICES[role] || []) {
+    const options = song?.voices?.[role]?.map((id) => voiceById[id]).filter(Boolean) ?? VOICES[role] ?? [];
+    for (const v of options) {
       let w = (v.weight ?? 1) * Math.exp(-((v.energy - dir.energy) ** 2) / 0.15);
       for (const t of taken) if (t.family === v.family) w *= 0.25;
       if (dir.feature === role && v.lead) w *= 1.8;
       if (v.id === current) w *= held >= 2 ? 0.5 : 2.2;
-      if (!current && v.id === DEFAULT_VOICE[role]) w *= 1.5;
+      if (!current && v.id === (song?.voices?.[role]?.[0] ?? DEFAULT_VOICE[role])) w *= song ? 3 : 1.5;
       voice[v.id] = w;
     }
     const clash = taken.find((t) => current && voiceById[current]?.family === t.family);
@@ -156,4 +160,37 @@ export function ruleScores(ctx, library) {
   }
 
   return { level, style, register, interaction, voice, reasons };
+}
+
+// Song mode: nobody tells the parts when to come in. Each part waits until enough of the parts
+// ahead of it in the song's build order are playing, with some randomness, so the swarm builds
+// the song up layer by layer on its own. Once in, a part stays (the director can still drop it).
+function songLevel(ctx, song, dir, active, last, reasons) {
+  const order = song.build?.length ? song.build : ['bass', 'drums', 'chords', 'melody'];
+  const rank = Math.max(0, order.indexOf(ctx.role));
+  // Count parts that were already playing last phrase, so two parts don't come in together.
+  const playing = Object.values(ctx.before || {}).filter((p) => p && p.level > 0 && p.notes.length).length;
+  const inNow = last && last.level > 0;
+  const ramp = (l) => Math.exp(-((l - (1 + 2 * dir.energy)) ** 2) / 0.9);
+  const level = { 1: ramp(1), 2: ramp(2) * 1.3, 3: ramp(3) };
+  if (dir.drop === ctx.role) {
+    reasons.push({ text: 'direction: drop out', when: (d) => d.level === 0 });
+    return { 0: 5, 1: 0.5 };
+  }
+  if (inNow) {
+    level[last.level] *= 1.6; // settle into the part
+    level[0] = 0.01;
+    return level;
+  }
+  // Not playing yet: enter once the parts ahead of me are in (or if the wait drags on).
+  const ready = playing >= rank;
+  const waited = ctx.history.filter((h) => !h.level).length;
+  // The first part in the build order always starts alone; later parts can jump the queue a little
+  // if the wait drags on, so the order is a tendency, not a script.
+  const enter = ready ? 0.75 : rank === 0 ? 1 : playing === 0 ? 0 : Math.min(0.45, 0.04 + 0.06 * waited);
+  for (const l of [1, 2, 3]) level[l] *= enter * (l === 1 ? 1.6 : 1); // come in gently
+  level[0] = 1 - enter;
+  if (ready) reasons.push({ text: `${playing} part${playing === 1 ? ' is' : 's are'} playing → coming in`, when: (d) => d.level > 0 });
+  else reasons.push({ text: `waiting for ${rank - playing} more part${rank - playing === 1 ? '' : 's'} before coming in`, when: (d) => d.level === 0 });
+  return level;
 }

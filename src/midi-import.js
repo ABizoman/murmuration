@@ -5,10 +5,12 @@
 
 import { parseChord, degreeInterval, anchorFor } from './theory.js';
 
-const GM_DRUMS = { 35: 'kick', 36: 'kick', 37: 'snare', 38: 'snare', 39: 'snare', 40: 'snare', 42: 'hat', 44: 'hat', 46: 'ohat' };
+const GM_DRUMS = { 35: 'kick', 36: 'kick', 37: 'snare', 38: 'snare', 39: 'snare', 40: 'snare', 42: 'hat', 44: 'hat', 46: 'ohat', 49: 'ohat', 51: 'hat', 48: 'tom1', 50: 'tom1', 45: 'tom2', 47: 'tom2', 41: 'tom3', 43: 'tom3' };
 
 // rawNotes: [{ midi, ticks, durationTicks, velocity }] (what @tonejs/midi gives you)
-// meta: { id, role, style, density, key, mode, progression: ['i','VI','III','VII'] }
+// meta: { id, role, style, density, key, mode, progression: ['i','VI','III','VII'], bars? }
+//   bars: force the loop length (1, 2, 4 or 8); otherwise the shortest that holds every note.
+// Notes outside the chord and scale keep their exact pitch through `acc` (semitones from the degree).
 export function toRelativeLoop(rawNotes, ppq, meta) {
   const tps = ppq / 4; // ticks per 16th
   const q = rawNotes.map((n) => ({
@@ -19,7 +21,7 @@ export function toRelativeLoop(rawNotes, ppq, meta) {
   }));
   if (!q.length) throw new Error('no notes');
   const lastStep = Math.max(...q.map((n) => n.abs + 1));
-  const bars = [1, 2, 4].find((b) => b * 16 >= lastStep) ?? 4;
+  const bars = meta.bars ?? [1, 2, 4, 8].find((b) => b * 16 >= lastStep) ?? 8;
   const inLoop = q.filter((n) => n.abs < bars * 16);
   const chordFor = (bar) => parseChord(meta.progression[bar % meta.progression.length], meta.key, meta.mode);
   const base = { id: meta.id, role: meta.role, style: meta.style, density: meta.density, bars };
@@ -63,9 +65,13 @@ export function toRelativeLoop(rawNotes, ppq, meta) {
       const dist = Math.min(Math.abs(iv - semis), 12 - Math.abs(iv - semis)) + (d % 2 ? 0.1 : 0); // prefer chord tones on ties
       if (dist < bestDist) { best = d; bestDist = dist; }
     }
+    const iv = degreeInterval(best, chord);
+    const acc = ((semis - iv + 18) % 12) - 6; // -6..+5 semitones away from the nearest degree (0 when exact)
     const anchor = anchorFor(meta.role, chord, 0);
-    const oct = Math.round((n.midi - anchor - degreeInterval(best, chord)) / 12);
-    return { bar, step: n.abs % 16, dur: n.dur, deg: best, oct, vel: n.vel };
+    const oct = Math.round((n.midi - acc - anchor - iv) / 12);
+    const ev = { bar, step: n.abs % 16, dur: n.dur, deg: best, oct, vel: n.vel };
+    if (acc) ev.acc = acc;
+    return ev;
   });
   // Re-centre so the loop sits in our register for this role, keeping its contour.
   const octs = events.map((e) => e.oct).sort((a, b) => a - b);

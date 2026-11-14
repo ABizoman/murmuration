@@ -32,6 +32,13 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(await QRCode.toString(LAN_URL, { type: 'svg', margin: 1, color: { dark: '#e6e8ee', light: '#0000' } }));
   }
+  if (url.pathname === '/songs-local.json') {
+    // Your own songs: every .js file in songs-local/ (gitignored). See docs/ADDING_SONGS.md.
+    let files = [];
+    try { files = fs.readdirSync(path.join(ROOT, 'songs-local')).filter((f) => f.endsWith('.js')).sort(); } catch {}
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify(files));
+  }
   if (url.pathname === '/info') {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ lanUrl: LAN_URL, ai: aiStatus() }));
