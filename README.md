@@ -29,8 +29,9 @@ how busy, which pattern, which register, and whether to echo or answer another p
 ### API keys
 Keys stay on the laptop. Put them in a `.env` file next to `server.js` (it is gitignored, so it never reaches GitHub), or in the environment:
 ```
-GEMINI_API_KEY=...     # director LLM: Gemini via the Interactions API (DIRECTOR_MODEL to change the model, default gemini-3.8-flash)
-JEV_API_KEY=...        # real Jev (JEV_URL to change the endpoint)
+GEMINI_API_KEY=...     # director LLM: Gemini via the Interactions API
+# DIRECTOR_MODELS=gemini-3.5-flash-lite,gemini-3-flash-preview,gemini-3.8-flash   (tried in order; busy models are skipped)
+JEV_API_KEY=...        # real Jev: a TypeSafe key, or an OpenRouter key (sk-or-..., model typesafe/jev-1.14 via OpenRouter)
 ```
 Without a key, each route answers with a **stand-in that is not a model** (pseudo-random preferences for Jev, a fixed energy arc for the director),
 labelled as such on screen, so the deadlines, blending and voting can be tested. `decideReal()` in `ai.js` was written from public

@@ -1,22 +1,32 @@
 // AI relays for the signalling server. Keys stay on the laptop; phones only talk to these routes.
 //
-//   POST /decide  { state, questions }  -> { answers: { id: probability }, source }
+//   POST /decide  { state, questions }  -> { answers: { id: { option: probability } }, source }
 //   POST /direct  { state }             -> { directive, source }
 //
 // Environment:
-//   JEV_API_KEY        use the real Jev model (optional JEV_URL, default TypeSafe's endpoint)
+//   JEV_API_KEY        use the real Jev model: a TypeSafe key, or an OpenRouter key (sk-or-...)
+//                      (optional JEV_URL and JEV_MODEL to override)
 //   GEMINI_API_KEY     use Gemini as the director LLM (optional DIRECTOR_MODEL)
 // Without a key, each route answers with a clearly labelled stand-in so the rest of the system
 // (deadlines, blending, voting) can be built and demonstrated before API access is sorted out.
 
 import { sanitiseDirective, DIRECTIVE_ROLES } from './src/decide/directive.js';
 
-const JEV_URL = process.env.JEV_URL || 'https://api.typesafe.ai/v1/systemone';
-const DIRECTOR_MODEL = process.env.DIRECTOR_MODEL || 'gemini-3.8-flash';
+// A TypeSafe key goes to TypeSafe; an OpenRouter key (sk-or-...) goes to OpenRouter's
+// TypeSafe-compatible System One route, which takes the same questions and answers.
+const viaOpenRouter = () => (process.env.JEV_API_KEY || '').trim().startsWith('sk-or-');
+const jevUrl = () => process.env.JEV_URL || (viaOpenRouter() ? 'https://openrouter.ai/api/v1/systemone' : 'https://api.typesafe.ai/v1/systemone');
+const jevModel = () => process.env.JEV_MODEL || (viaOpenRouter() ? 'typesafe/jev-1.14' : 'jev-latest');
+// Tried in order; a model that is overloaded (503), rate-limited (429), gone (404) or slow is skipped.
+// Free-tier availability changes by the hour, so this is a list. Override: DIRECTOR_MODELS=a,b,c
+const DIRECTOR_MODELS = (process.env.DIRECTOR_MODELS || process.env.DIRECTOR_MODEL || 'gemini-3.5-flash-lite,gemini-3-flash-preview,gemini-3.8-flash')
+  .split(',').map((m) => m.trim()).filter(Boolean);
+const DIRECTOR_MODEL = DIRECTOR_MODELS[0];
+const DIRECTOR_TIMEOUT_MS = Number(process.env.DIRECTOR_TIMEOUT_MS) || 12000; // per model
 
 export const aiStatus = () => ({
-  jev: process.env.JEV_API_KEY ? 'jev' : 'stand-in',
-  director: process.env.GEMINI_API_KEY ? DIRECTOR_MODEL : 'stand-in',
+  jev: process.env.JEV_API_KEY ? `${jevModel()}${viaOpenRouter() ? ' via OpenRouter' : ''}` : 'stand-in',
+  director: process.env.GEMINI_API_KEY ? DIRECTOR_MODELS.join(' → ') : 'stand-in',
 });
 
 function hash(str) {
@@ -28,38 +38,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- /decide -------------------------------------------------------------------------------
 
-// Jev answers can be a bare number, a boolean, or an object: accept the common shapes.
-function probability(a) {
-  if (typeof a === 'number') return a;
-  if (typeof a === 'boolean') return a ? 0.9 : 0.1;
-  if (a && typeof a === 'object') {
-    for (const k of ['probability', 'p', 'score', 'value', 'answer']) {
-      if (typeof a[k] === 'number') return a[k];
-      if (typeof a[k] === 'boolean') return a[k] ? 0.9 : 0.1;
-    }
+// One answer -> { key: probability } over the question's criteria.
+function choiceProbabilities(a, keys) {
+  if (!a || typeof a !== 'object') return null;
+  if (a.probabilities && typeof a.probabilities === 'object') {
+    const out = {};
+    for (const k of keys) if (typeof a.probabilities[k] === 'number') out[k] = a.probabilities[k];
+    if (Object.keys(out).length) return out;
+  }
+  if (typeof a.choice === 'string' && keys.includes(a.choice)) {
+    // only the winner and a confidence: spread the rest evenly
+    const c = typeof a.confidence === 'number' ? Math.min(0.95, Math.max(0.34, a.confidence)) : 0.6;
+    return Object.fromEntries(keys.map((k) => [k, k === a.choice ? c : (1 - c) / Math.max(1, keys.length - 1)]));
   }
   return null;
 }
 
+// TypeSafe's Jev API: POST /v1/systemone with a Bearer key, { model, state, questions }.
+// Choice questions carry their options in `criteria`; answers come back keyed by question name.
 async function decideReal(state, questions) {
-  // NOTE: written from public descriptions of the API (state + named typed questions in,
-  // answers keyed by question name out). Check the field names against TypeSafe's docs with
-  // your first real key: only this function needs to change.
-  const res = await fetch(JEV_URL, {
+  const res = await fetch(jevUrl(), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.JEV_API_KEY}` },
-    body: JSON.stringify({ state, questions }),
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.JEV_API_KEY.trim()}` },
+    body: JSON.stringify({ model: jevModel(), state, questions }),
     signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) throw new Error(`Jev answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
+  const raw = data.answers && typeof data.answers === 'object' ? data.answers : data;
   const answers = {};
-  for (const [id, a] of Object.entries(data.answers || {})) {
-    const p = probability(a);
-    if (p != null) answers[id] = p;
+  for (const [id, q] of Object.entries(questions)) {
+    const p = choiceProbabilities(raw[id], Object.keys(q.criteria || {}));
+    if (p) answers[id] = p;
   }
-  if (!Object.keys(answers).length) throw new Error('Jev answer had no usable probabilities');
-  return { answers, source: 'jev' };
+  if (!Object.keys(answers).length) throw new Error(`Jev answer had no usable probabilities: ${JSON.stringify(data).slice(0, 200)}`);
+  return { answers, source: viaOpenRouter() ? 'jev (OpenRouter)' : 'jev' };
 }
 
 // Stand-in: NOT a model. It gives every option a repeatable pseudo-random preference that changes
@@ -67,11 +80,14 @@ async function decideReal(state, questions) {
 async function decideStandIn(state, questions) {
   await sleep(120 + Math.random() * 380); // Jev-like latency
   const answers = {};
-  for (const id of Object.keys(questions)) {
-    const [, q, opt] = id.split('|');
-    let p = 0.15 + 0.7 * hash(`${state.length}:${state.slice(-400)}:${id}`);
-    if (q === 'interaction' && opt !== 'none') p = Math.min(0.95, p * 1.3);
-    answers[id] = p;
+  for (const [id, q] of Object.entries(questions)) {
+    const w = {};
+    for (const key of Object.keys(q.criteria || {})) {
+      w[key] = 0.15 + 0.7 * hash(`${state.length}:${state.slice(-400)}:${id}:${key}`);
+      if (id.endsWith('|interaction') && key !== 'none') w[key] *= 1.3;
+    }
+    const total = Object.values(w).reduce((x, y) => x + y, 0) || 1;
+    answers[id] = Object.fromEntries(Object.entries(w).map(([k, v]) => [k, v / total]));
   }
   return { answers, source: 'jev stand-in' };
 }
@@ -117,23 +133,43 @@ export function geminiText(data) {
 }
 
 // Gemini through the Interactions API, as in the AI Studio get-started guide.
-async function directReal(state) {
+async function askGemini(model, state) {
   const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY, 'Api-Revision': '2026-05-20' },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY.trim(), 'Api-Revision': '2026-05-20' },
     body: JSON.stringify({
-      model: DIRECTOR_MODEL,
+      model,
       input: `${DIRECTOR_SYSTEM}\n\n${state.slice(0, 8000)}`,
       response_format: { type: 'text', mime_type: 'application/json', schema: DIRECTIVE_SCHEMA },
+      store: false,
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(DIRECTOR_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`Gemini answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`${model} answered ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const text = geminiText(await res.json());
   const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
   const directive = sanitiseDirective(JSON.parse(json));
-  if (!directive) throw new Error('Gemini answer was not a usable directive');
-  return { directive, source: DIRECTOR_MODEL };
+  if (!directive) throw new Error(`${model} answer was not a usable directive`);
+  return directive;
+}
+
+const skipUntil = new Map(); // model -> time before which it is not tried again
+
+async function directReal(state) {
+  const errors = [];
+  const now = Date.now();
+  const order = DIRECTOR_MODELS.filter((m) => (skipUntil.get(m) || 0) <= now);
+  for (const model of order.length ? order : DIRECTOR_MODELS) {
+    try {
+      const directive = await askGemini(model, state);
+      return { directive, source: model };
+    } catch (err) {
+      const msg = err.name === 'TimeoutError' ? `${model} timed out` : err.message;
+      errors.push(msg);
+      skipUntil.set(model, Date.now() + (/ 404|no longer available/.test(msg) ? 3600e3 : 60e3));
+    }
+  }
+  throw new Error(`no Gemini model answered: ${errors.join(' | ')}`);
 }
 
 // Stand-in: NOT an LLM. A fixed energy arc with random features, so proposals and voting can be tested.

@@ -125,15 +125,18 @@ test('every echo/answer pairing gives valid notes in range', () => {
   }
 });
 
-test('Jev questions: one yes/no per option, grouped back per role', () => {
+test('Jev questions: one choice question per decision, answers decoded back to options', () => {
   const peers = { bass: part('bass/pulse/medium'), chords: part('chords/pad/medium'), drums: part('drums/four/medium') };
   const ctxs = { melody: ctxFor('melody', peers) };
-  const q = buildQuestions(ctxs, lib);
-  assert.ok(q['melody|level|3'] && q['melody|interaction|answer:bass'] && q['melody|register|1']);
-  assert.ok(Object.values(q).every((x) => x.type === 'boolean' && x.instructions.endsWith('?')));
+  const { questions: q, decode } = buildQuestions(ctxs, lib);
+  assert.deepEqual(Object.keys(q).sort(), ['melody|interaction', 'melody|level', 'melody|register', 'melody|style']);
+  assert.ok(Object.values(q).every((x) => x.type === 'choice' && x.instructions.endsWith('?') && Object.keys(x.criteria).length >= 2));
+  assert.ok(Object.values(q).flatMap((x) => Object.keys(x.criteria)).every((k) => /^[a-z0-9_]+$/i.test(k)), 'safe option keys');
+  assert.equal(decode['melody|interaction'].answer_bass, 'answer:bass');
+  assert.equal(decode['melody|level'].busy, '3');
   const state = buildState(ctxs);
   assert.ok(state.includes('A minor') && state.includes('- bass:') && state.includes('x'));
-  const g = groupAnswers({ 'melody|level|3': 0.8, 'melody|interaction|answer:bass': 0.6, 'bad': 1, 'melody|style|x': NaN });
+  const g = groupAnswers({ 'melody|level': { busy: 0.8, bogus: 1 }, 'melody|interaction': { answer_bass: 0.6 }, 'melody|register': { high: NaN }, nope: { a: 1 } }, decode);
   assert.deepEqual(g, { melody: { level: { 3: 0.8 }, interaction: { 'answer:bass': 0.6 } } });
 });
 
@@ -143,7 +146,7 @@ test('Jev client: in-time answers are used, late or failed ones fall back to rul
   const reply = (ms, ok = true) => async () => {
     await new Promise((r) => setTimeout(r, ms));
     if (!ok) throw new Error('offline');
-    return { ok: true, json: async () => ({ answers: { 'melody|level|3': 0.9, 'melody|level|1': 0.1 }, source: 'jev stand-in' }) };
+    return { ok: true, json: async () => ({ answers: { 'melody|level': { busy: 0.9, sparse: 0.1 } }, source: 'jev stand-in' }) };
   };
   const fast = new Jev({ library: lib, fetchFn: reply(5) });
   await fast.plan(6, ctxs, 300);
