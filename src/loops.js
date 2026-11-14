@@ -3,10 +3,11 @@
 // Loop shape:
 // {
 //   id, role: 'drums'|'bass'|'chords'|'melody', style, density: 'sparse'|'medium'|'busy',
-//   bars: 1|2|4,
+//   bars: 1|2|4|8,
 //   voicing: 3|4               (chords only: triad or seventh chord)
 //   events: [{ bar, step, dur, vel, deg?, oct?, drum? }]
 //     deg: scale degree relative to the chord root (see theory.js), pitched roles only
+//     acc: optional semitone offset from that degree, for notes outside the chord and scale
 //     drum: 'kick'|'snare'|'hat'|'ohat'
 //     chords events have no deg: the voicing is worked out from the chord
 // }
@@ -102,8 +103,8 @@ add('melody', 'call', 'busy', 4, P([
   [3, 0, 12, 0],
 ]));
 
-export function createLibrary({ packs = [] } = {}) {
-  const loops = [...L, ...packs];
+export function createLibrary({ packs = [], builtins = true } = {}) {
+  const loops = [...(builtins ? L : []), ...packs];
   const byStyle = (role, style) => loops.filter((l) => l.role === role && l.style === style);
   return {
     loops,
@@ -137,7 +138,7 @@ export function validateLoop(l) {
   const bad = [];
   if (!ROLES.includes(l.role)) bad.push(`role ${l.role}`);
   if (!DENSITIES.includes(l.density)) bad.push(`density ${l.density}`);
-  if (![1, 2, 4].includes(l.bars)) bad.push(`bars ${l.bars}`);
+  if (![1, 2, 4, 8].includes(l.bars)) bad.push(`bars ${l.bars}`);
   if (!l.events?.length) bad.push('no events');
   for (const e of l.events || [])
     if (e.bar < 0 || e.bar >= l.bars || e.step < 0 || e.step > 15 || !(e.dur > 0)) {

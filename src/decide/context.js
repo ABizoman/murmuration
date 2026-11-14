@@ -35,7 +35,10 @@ export function buildContext({ role, phrase, structure, roles, lookup, directive
     peers[r] = summarise(lookup(phrase, r), r, phrase) || summarise(lookup(phrase - 1, r), r, phrase - 1);
   }
   const history = [1, 2, 3, 4].map((k) => summarise(lookup(phrase - k, role), role, phrase - k)).filter(Boolean);
-  return { role, phrase, structure, peers, last: history[0] || null, history, directive };
+  // What the others played last phrase only (not what they just decided for this one).
+  const before = {};
+  for (const r of roles) if (r !== role) before[r] = summarise(lookup(phrase - 1, r), r, phrase - 1);
+  return { role, phrase, structure, peers, before, last: history[0] || null, history, directive };
 }
 
 // 16 characters per bar: x = something starts on that 16th, . = nothing.

@@ -27,6 +27,14 @@ match the section's energy, avoid the same family as another part (no choir on c
 and change instrument after a couple of sections. Levels were set by measuring each part's loudness (LUFS) with the others muted.
 Untick "auto" on a card to pick an instrument by hand. Until a sample set has loaded, that part plays on the old synth.
 
+## Song mode
+Pick a song in the **Song** menu instead of improvising from a seed. The song fixes the key, tempo, chords and every part's notes;
+the swarm builds it up on its own: one part starts alone, and each agent comes in once enough parts are already playing
+(in roughly the song's order, with some randomness), then picks its own busyness and instrument. The director can still call a drop.
+Built in (public domain): *In the Hall of the Mountain King* (Grieg), *Canon in D* (Pachelbel), *Ode to Joy* (Beethoven).
+
+Add your own songs by hand or from MIDI: see [`docs/ADDING_SONGS.md`](docs/ADDING_SONGS.md). Songs in `songs-local/` are loaded automatically and never committed.
+
 ## Loop packs
 On top of the hand-written loops, `src/packs/` holds loops built from three openly licensed sources (credits in `CREDITS.md`):
 

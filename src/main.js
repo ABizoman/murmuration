@@ -8,6 +8,7 @@ import { createAudio } from './audio.js';
 import { importMidiFile } from './midi-import.js';
 import { Swarm } from './swarm/swarm.js';
 import { PACK_LOOPS } from './packs.js';
+import { SONGS, registerSong, songSeed, songFromSeed } from './songs/index.js';
 import { Jev } from './decide/jev.js';
 import { Director, sectionOf, SECTION_PHRASES } from './decide/director.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './decide/directive.js';
@@ -21,6 +22,24 @@ const LEVELS = ['silent', 'sparse', 'medium', 'busy'];
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
 const library = createLibrary({ packs: PACK_LOOPS });
+
+// Songs in songs-local/ (gitignored) are loaded before anything starts, so every device that
+// joins a "song:<id>" seed knows the song.
+try {
+  const files = await fetch('/songs-local.json').then((r) => (r.ok ? r.json() : []));
+  for (const f of files) {
+    try {
+      registerSong((await import(`/songs-local/${f}`)).default);
+    } catch (err) {
+      console.error(`songs-local/${f}:`, err);
+      setTimeout(() => log(`could not load songs-local/${esc(f)}: ${esc(err.message)}`), 0);
+    }
+  }
+} catch {}
+
+const songLibraries = {};
+const libraryFor = (structure) =>
+  structure.song ? (songLibraries[structure.song.id] ||= createLibrary({ packs: SONGS[structure.song.id].loops, builtins: false })) : library;
 const agents = ROLES.map((r) => new Agent(r, library));
 let realAudio = null;
 let tickTimer = null;
@@ -126,11 +145,28 @@ function showStructure(seed) {
   return s;
 }
 $('seed').addEventListener('input', () => !swarm.song && showStructure($('seed').value));
+
+// Song picker: "improvise" uses the seed; a song fixes key, tempo, chords and parts.
+$('song').innerHTML = `<option value="">Improvise (from the seed)</option>` +
+  Object.values(SONGS).map((s) => `<option value="${esc(s.id)}">${esc(s.title)} — ${esc(s.composer)}</option>`).join('');
+$('song').addEventListener('change', () => {
+  if (swarm.song) return;
+  $('seed').disabled = !!$('song').value;
+  showStructure($('song').value ? songSeed($('song').value) : $('seed').value);
+});
+function showSeed(seed) {
+  const song = songFromSeed(seed);
+  $('song').value = song ? song.id : '';
+  if (!song) $('seed').value = seed;
+}
 showStructure($('seed').value);
 
 function playSong(song) {
   const structure = showStructure(song.seed);
-  $('seed').value = song.seed;
+  showSeed(song.seed);
+  const lib = libraryFor(structure);
+  for (const a of agents) a.library = lib;
+  jev.library = lib;
   engine.start(structure, song.startMs);
   syncDoubling();
   clearInterval(tickTimer);
@@ -151,7 +187,7 @@ $('start').addEventListener('click', async () => {
     log(`<b>joining</b> "${swarm.song.seed}"`);
     swarm.join();
   } else {
-    swarm.startSong($('seed').value.trim() || 'durhack');
+    swarm.startSong($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack');
     log(`<b>started a new song</b> "${swarm.song.seed}"`);
   }
   playSong(swarm.song);
@@ -161,8 +197,9 @@ $('start').addEventListener('click', async () => {
 
 function onSong(song, reason) {
   log(`song: ${reason}`);
-  $('seed').value = song.seed;
+  showSeed(song.seed);
   $('seed').disabled = true;
+  $('song').disabled = true;
   showStructure(song.seed);
   if (swarm.playing) playSong(song); // switch to the winning song
   updateButton();
