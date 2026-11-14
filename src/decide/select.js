@@ -6,6 +6,9 @@
 export const QUESTIONS = ['level', 'style', 'register', 'interaction'];
 const SHARPEN = 1.4; // >1 makes the likely options more likely
 const JEV_FLOOR = 0.03;
+// How much Jev's probabilities count against the rules (1 = equal footing). Jev is often 90%+ sure,
+// which at full weight makes it the sole decider and the music repetitive.
+export const JEV_WEIGHT = 0.6;
 
 export function normalise(weights) {
   const total = Object.values(weights).reduce((a, b) => a + b, 0);
@@ -14,7 +17,7 @@ export function normalise(weights) {
   return out;
 }
 
-export function blend(rule, jev, jevWeight = 1) {
+export function blend(rule, jev, jevWeight = JEV_WEIGHT) {
   const keys = Object.keys(rule).filter((k) => rule[k] > 0);
   const w = {};
   const jn = jev ? normalise(Object.fromEntries(keys.map((k) => [k, Math.max(jev[k] ?? 0, JEV_FLOOR)]))) : null;

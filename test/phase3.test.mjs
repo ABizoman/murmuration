@@ -63,7 +63,7 @@ test('selector: Jev shifts the odds, a uniform Jev answer changes nothing, pins 
   assert.deepEqual(blend(rule, null), { a: 0.5, b: 0.5 });
   assert.deepEqual(blend(rule, { a: 0.4, b: 0.4 }), { a: 0.5, b: 0.5 });
   const pushed = blend(rule, { a: 0.9, b: 0.1 });
-  assert.ok(pushed.a > 0.85 && !('c' in pushed));
+  assert.ok(pushed.a > 0.7 && pushed.a < 0.9 && !('c' in pushed), `Jev pushes but does not dictate: ${pushed.a}`);
   const scores = { level: { 1: 1, 2: 1, 3: 1 }, style: { x: 1 }, register: { 0: 1, 1: 1 }, interaction: { none: 1 } };
   const r = decide(scores, null, { level: 3, register: 1 }, rng(3));
   assert.equal(r.d.level, 3);
@@ -72,7 +72,7 @@ test('selector: Jev shifts the odds, a uniform Jev answer changes nothing, pins 
   let busy = 0;
   const stream = rng(9);
   for (let i = 0; i < 400; i++) busy += decide(scores, { level: { 1: 0.05, 2: 0.05, 3: 0.9 } }, null, stream).d.level === 3;
-  assert.ok(busy > 320, `Jev's favourite picked ${busy}/400`);
+  assert.ok(busy > 250, `Jev's favourite picked ${busy}/400`);
 });
 
 test('echo: rhythm echo lands on the target onsets; contour echo copies the shape in my register', () => {
