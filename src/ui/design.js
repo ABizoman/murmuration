@@ -1,5 +1,5 @@
-// Design layer for agent.html. It does not run the band: src/main.js (the same file index.html uses)
-// does all of that, unchanged. This file only reads what main.js exposes on window.murmuration to
+// Design layer for index.html. It does not run the band: src/main.js (the same file classic.html
+// uses) does all of that, unchanged. This file only reads what main.js exposes on window.murmuration to
 //   * drive the orb from this device's audio output,
 //   * draw the grid aura (fixed playhead, notes sliding right to left),
 //   * show a short status, and
@@ -62,6 +62,11 @@ function renderStatus() {
   setText($('statusSub'), playing
     ? `${others ? `with ${others} other device${others === 1 ? '' : 's'}` : 'on your own so far'}`
     : swarm.song ? 'Press Join the song, or tell your agent what to play.' : 'Press Start a song, or tell your agent what to play.');
+
+  // main.js fills #samples with the sampled-instrument count. Worth showing while instruments are
+  // still arriving or one failed; once they are all in, it is just noise on the stage.
+  const sm = $('samples');
+  sm.hidden = !/loading|failed/.test(sm.textContent);
 
   const li = $('lastInstruction');
   li.hidden = !lastInstruction;

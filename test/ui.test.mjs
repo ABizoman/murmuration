@@ -66,7 +66,7 @@ test('a part with only one register says so rather than reporting no change', ()
   assert.doesNotMatch(parseInstruction('melody higher', fresh()).summary, /no register to move/);
 });
 
-test('every suggestion chip in agent.html is understood', () => {
+test('every suggestion chip on the main screen is understood', () => {
   for (const chip of ['Busier', 'Calm it down', 'Go higher', 'Take a break', 'Let it decide']) {
     assert.equal(parseInstruction(chip, fresh(), ['drums']).understood, true, chip);
   }
