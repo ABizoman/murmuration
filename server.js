@@ -12,6 +12,9 @@ import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { decide, direct, aiStatus } from './ai.js';
 
+// Keys can live in a .env file next to this script (it is gitignored): GEMINI_API_KEY=..., JEV_API_KEY=...
+try { process.loadEnvFile?.(path.join(path.dirname(fileURLToPath(import.meta.url)), '.env')); } catch {}
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8000);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.mid': 'audio/midi' };
@@ -104,6 +107,6 @@ server.listen(PORT, '0.0.0.0', async () => {
   try { console.log(await QRCode.toString(LAN_URL, { type: 'terminal', small: true })); } catch {}
   const ai = aiStatus();
   console.log(`  Jev: ${ai.jev === 'jev' ? 'live (JEV_API_KEY)' : 'stand-in (set JEV_API_KEY for the real model)'}`);
-  console.log(`  Director: ${ai.director === 'llm' ? 'live LLM (ANTHROPIC_API_KEY)' : 'stand-in (set ANTHROPIC_API_KEY for a real LLM)'}\n`);
+  console.log(`  Director: ${ai.director === 'stand-in' ? 'stand-in (set GEMINI_API_KEY for the real LLM)' : `live, ${ai.director} (GEMINI_API_KEY)`}\n`);
   console.log('  Ctrl+C stops the server. Devices already connected keep playing.\n');
 });

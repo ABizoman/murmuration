@@ -5,18 +5,18 @@
 //
 // Environment:
 //   JEV_API_KEY        use the real Jev model (optional JEV_URL, default TypeSafe's endpoint)
-//   ANTHROPIC_API_KEY  use a real LLM as director (optional DIRECTOR_MODEL)
+//   GEMINI_API_KEY     use Gemini as the director LLM (optional DIRECTOR_MODEL)
 // Without a key, each route answers with a clearly labelled stand-in so the rest of the system
 // (deadlines, blending, voting) can be built and demonstrated before API access is sorted out.
 
 import { sanitiseDirective, DIRECTIVE_ROLES } from './src/decide/directive.js';
 
 const JEV_URL = process.env.JEV_URL || 'https://api.typesafe.ai/v1/systemone';
-const DIRECTOR_MODEL = process.env.DIRECTOR_MODEL || 'claude-haiku-5-5';
+const DIRECTOR_MODEL = process.env.DIRECTOR_MODEL || 'gemini-3.8-flash';
 
 export const aiStatus = () => ({
   jev: process.env.JEV_API_KEY ? 'jev' : 'stand-in',
-  director: process.env.ANTHROPIC_API_KEY ? 'llm' : 'stand-in',
+  director: process.env.GEMINI_API_KEY ? DIRECTOR_MODEL : 'stand-in',
 });
 
 function hash(str) {
@@ -90,20 +90,50 @@ Reply with ONLY a JSON object, no other text:
 {"energy": number 0-1, "feature": one of "drums","bass","chords","melody" or null, "drop": one of "drums","bass","melody" or null, "pair": {"who": role, "mode": "echo" or "answer", "whom": role} or null, "note": "one short sentence for the screen"}
 Shape the piece over time: build, release, contrast with the previous section. Use "drop" rarely. Do not repeat the previous direction.`;
 
+const DIRECTIVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    energy: { type: 'number' },
+    feature: { type: 'string', enum: ['drums', 'bass', 'chords', 'melody', 'none'] },
+    drop: { type: 'string', enum: ['drums', 'bass', 'melody', 'none'] },
+    pair: {
+      type: 'object',
+      properties: {
+        who: { type: 'string', enum: DIRECTIVE_ROLES },
+        mode: { type: 'string', enum: ['echo', 'answer'] },
+        whom: { type: 'string', enum: DIRECTIVE_ROLES },
+      },
+    },
+    note: { type: 'string' },
+  },
+  required: ['energy', 'note'],
+};
+
+// Text of a Gemini Interactions API answer: the model_output step's content[].text.
+export function geminiText(data) {
+  const steps = Array.isArray(data?.steps) ? data.steps : [];
+  const out = steps.filter((s) => s.type === 'model_output').flatMap((s) => s.content || []).map((c) => c.text || '').join('');
+  return out || (typeof data?.output_text === 'string' ? data.output_text : '');
+}
+
+// Gemini through the Interactions API, as in the AI Studio get-started guide.
 async function directReal(state) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: DIRECTOR_MODEL, max_tokens: 200, system: DIRECTOR_SYSTEM, messages: [{ role: 'user', content: state.slice(0, 8000) }] }),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY, 'Api-Revision': '2026-05-20' },
+    body: JSON.stringify({
+      model: DIRECTOR_MODEL,
+      input: `${DIRECTOR_SYSTEM}\n\n${state.slice(0, 8000)}`,
+      response_format: { type: 'text', mime_type: 'application/json', schema: DIRECTIVE_SCHEMA },
+    }),
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`LLM answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const data = await res.json();
-  const text = (data.content || []).map((c) => c.text || '').join('');
+  if (!res.ok) throw new Error(`Gemini answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const text = geminiText(await res.json());
   const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
   const directive = sanitiseDirective(JSON.parse(json));
-  if (!directive) throw new Error('LLM answer was not a usable directive');
-  return { directive, source: 'llm' };
+  if (!directive) throw new Error('Gemini answer was not a usable directive');
+  return { directive, source: DIRECTOR_MODEL };
 }
 
 // Stand-in: NOT an LLM. A fixed energy arc with random features, so proposals and voting can be tested.
@@ -128,6 +158,6 @@ async function directStandIn(state) {
 
 export async function direct({ state }) {
   if (typeof state !== 'string') throw new Error('bad request');
-  if (process.env.ANTHROPIC_API_KEY) return directReal(state);
+  if (process.env.GEMINI_API_KEY) return directReal(state);
   return directStandIn(state);
 }
