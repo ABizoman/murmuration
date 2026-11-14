@@ -60,7 +60,7 @@ export class Director {
     if (!this.proposals.has(p.section)) this.proposals.set(p.section, new Map());
     const known = this.proposals.get(p.section);
     if (known.has(p.pid)) return;
-    known.set(p.pid, { section: p.section, pid: p.pid, by: p.by, ts: Number(p.ts) || 0, directive, source: String(p.source || 'llm').slice(0, 40) });
+    known.set(p.pid, { section: p.section, pid: p.pid, by: p.by, ts: Number(p.ts) || 0, directive, source: String(p.source || 'llm').slice(0, 20) });
     // endorse the earliest proposal seen so far
     const best = [...known.values()].sort((a, b) => a.ts - b.ts || (a.pid < b.pid ? -1 : 1))[0];
     const mine = this.endorsements.get(p.section)?.get(this.id);
@@ -109,7 +109,7 @@ export class Director {
   adoptFromPeer(p) {
     const directive = sanitiseDirective(p?.directive);
     if (!directive || !Number.isInteger(p.section) || this.adopted.has(p.section)) return;
-    this.adopted.set(p.section, { section: p.section, pid: String(p.pid), by: p.by, ts: Number(p.ts) || 0, directive, source: String(p.source || 'llm').slice(0, 40), votes: p.votes });
+    this.adopted.set(p.section, { section: p.section, pid: String(p.pid), by: p.by, ts: Number(p.ts) || 0, directive, source: String(p.source || 'llm').slice(0, 20), votes: p.votes });
     this.onChange();
   }
 }

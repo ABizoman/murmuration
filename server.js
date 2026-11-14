@@ -17,7 +17,7 @@ try { process.loadEnvFile?.(path.join(path.dirname(fileURLToPath(import.meta.url
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8000);
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.mid': 'audio/midi' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.mid': 'audio/midi', '.mp3': 'audio/mpeg' };
 
 function lanAddress() {
   for (const list of Object.values(os.networkInterfaces()))
@@ -62,7 +62,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(404);
       return res.end('not found');
     }
-    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
+    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': url.pathname.startsWith('/samples/') ? 'public, max-age=86400' : 'no-store' });
     res.end(data);
   });
 });

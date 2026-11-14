@@ -10,6 +10,7 @@ import { describePart } from './context.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './directive.js';
 import { ruleScores } from './rules.js';
 import { QUESTIONS } from './select.js';
+import { voiceById } from '../voices.js';
 
 // Each of an agent's four choices is one Jev "choice" question: the options go in `criteria`
 // (a safe key and a description each) and Jev returns a probability for every key.
@@ -21,6 +22,7 @@ const QUESTION_TEXT = {
   style: (role) => `Which pattern should the ${role} use in the next phrase?`,
   register: (role) => `Which register should the ${role} play in for the next phrase?`,
   interaction: (role) => `Should the ${role} react to another part in the next phrase?`,
+  voice: (role) => `Which instrument should play the ${role} part in the next section?`,
 };
 
 // option (as used by rules.js) -> [safe key, description]
@@ -28,6 +30,7 @@ function criterion(q, opt) {
   if (q === 'level') return [LEVEL_KEYS[opt], LEVEL_TEXT[opt]];
   if (q === 'style') return [`pattern_${String(opt).replace(/[^a-zA-Z0-9]/g, '_')}`, `The "${opt}" pattern`];
   if (q === 'register') return [REG_KEYS[opt], `Its ${REG_KEYS[opt]} register`];
+  if (q === 'voice') return [`voice_${String(opt).replace(/[^a-zA-Z0-9]/g, '_')}`, voiceById[opt]?.label ?? opt];
   if (opt === 'none') return ['none', 'Play its own part without imitating or answering anyone'];
   const [mode, target] = opt.split(':');
   return mode === 'echo'

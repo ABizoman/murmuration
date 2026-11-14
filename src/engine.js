@@ -20,7 +20,7 @@ export class Engine {
   constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150 }) {
     this.agents = Object.fromEntries(agents.map((a) => [a.role, a]));
     this.roles = ORDER.filter((r) => this.agents[r]);
-    this.audio = audio; // { play(role, note, whenMs, durMs) }  whenMs on the same clock as now()
+    this.audio = audio; // { play(role, note, whenMs, durMs, voiceId) }  whenMs on the same clock as now()
     this.now = now;
     this.onEvent = onEvent || (() => {});
     this.onPlan = onPlan || (() => {});
@@ -148,7 +148,7 @@ export class Engine {
           if (when > now + this.audioAheadMs) return;
           entry.sent.add(key);
           if (when < now - 20) return; // too late (joined mid-phrase, or tab throttled): skip
-          this.audio.play(role, n, when, n.dur * sMs);
+          this.audio.play(role, n, when, n.dur * sMs, part.d?.voice);
         });
       }
     }

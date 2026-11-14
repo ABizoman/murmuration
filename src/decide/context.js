@@ -1,3 +1,5 @@
+import { voiceById } from '../voices.js';
+
 // The shared score, as one agent sees it when deciding its next phrase.
 // Everything an agent knows comes from parts that were announced (its own or gossiped), so a
 // device that takes a part over continues from what the previous player did.
@@ -17,6 +19,7 @@ export function summarise(part, role, phrase) {
     style: d.style ?? null,
     register: d.register ?? 0,
     interaction: d.interaction ?? 'none',
+    voice: d.voice ?? null,
     density: notes.length / 4, // notes per bar
     meanPitch: pitches.length ? pitches.reduce((a, b) => a + b, 0) / pitches.length : null,
     onsets,
@@ -46,5 +49,6 @@ export function describePart(s) {
   if (!s) return 'unknown';
   if (!s.level || !s.notes.length) return 'resting';
   const inter = s.interaction && s.interaction !== 'none' ? `, ${s.interaction.replace(':', 'ing the ')}` : '';
-  return `${LEVEL_NAMES[s.level]} "${s.style}" pattern, ${REG_NAMES[s.register] ?? 'middle'} register${inter}, rhythm ${rhythmString(s)}`;
+  const on = s.voice && voiceById[s.voice] ? ` on ${voiceById[s.voice].label}` : '';
+  return `${LEVEL_NAMES[s.level]} "${s.style}" pattern${on}, ${REG_NAMES[s.register] ?? 'middle'} register${inter}, rhythm ${rhythmString(s)}`;
 }

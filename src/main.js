@@ -11,6 +11,7 @@ import { Jev } from './decide/jev.js';
 import { Director, sectionOf, SECTION_PHRASES } from './decide/director.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './decide/directive.js';
 import { summarise, describePart } from './decide/context.js';
+import { VOICES, voiceById } from './voices.js';
 
 const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
@@ -35,6 +36,7 @@ const swarm = new Swarm({
       engine.myRoles = new Set(roles);
       syncDoubling();
       if (gained.length && engine.myRoles.size > gained.length) log(`now also sounding <b>${gained.join(', ')}</b>`);
+      if (gained.length) preloadVoices();
       renderAgents();
     },
     message: (body, origin) => {
@@ -69,6 +71,20 @@ const director = new Director({
   onChange: renderDirection,
 });
 
+// Load the sampled instruments for the parts this device plays first, then the rest.
+function preloadVoices() {
+  if (!realAudio) return;
+  const mine = ROLES.filter((r) => engine.myRoles.has(r));
+  const order = [...mine, ...ROLES.filter((r) => !mine.includes(r))];
+  const ids = order.flatMap((r) => VOICES[r].filter((v) => !v.synth).map((v) => v.id));
+  realAudio.preload(ids);
+}
+
+function showSamples({ loaded, loading, failed }) {
+  const total = Object.values(VOICES).flat().filter((v) => !v.synth).length;
+  $('samples').textContent = `instruments ${loaded}/${total}${loading ? ' loading…' : ''}${failed ? ` (${failed} failed)` : ''}`;
+}
+
 function syncDoubling() {
   const why = swarm.view().whyMine;
   engine.doubling = new Set(Object.keys(why).filter((r) => why[r] === 'doubling'));
@@ -90,7 +106,7 @@ const engine = new Engine({
   agents,
   now: () => swarm.clock.now(), // shared swarm time
   // The engine schedules in shared time; Web Audio needs this device's local time.
-  audio: { play: (role, n, when, dur) => realAudio?.play(role, n, when - swarm.clock.offset, dur) },
+  audio: { play: (role, n, when, dur, voice) => realAudio?.play(role, n, when - swarm.clock.offset, dur, voice) },
   onEvent,
   onPlan: (phrase, ctxs, deadlineMs) => {
     jev.plan(phrase, ctxs, deadlineMs);
@@ -128,7 +144,7 @@ $('start').addEventListener('click', async () => {
     log('left the song (still connected to the swarm)');
     return updateButton();
   }
-  if (!realAudio) realAudio = await createAudio(); // needs this click
+  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples }); // needs this click
   try { await navigator.wakeLock?.request('screen'); } catch {}
   if (swarm.song) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
@@ -138,6 +154,7 @@ $('start').addEventListener('click', async () => {
     log(`<b>started a new song</b> "${swarm.song.seed}"`);
   }
   playSong(swarm.song);
+  preloadVoices();
   updateButton();
 });
 
@@ -186,7 +203,7 @@ function onRemotePart(body, origin) {
   const d = body.d && typeof body.d === 'object' ? body.d : {};
   engine.setRemotePart(body.phrase, body.role, {
     notes: validNotes(body.notes),
-    d: { level: Number(d.level) || 0, style: String(d.style ?? ''), register: Number(d.register) || 0, interaction: String(d.interaction ?? 'none') },
+    d: { level: Number(d.level) || 0, style: String(d.style ?? ''), register: Number(d.register) || 0, interaction: String(d.interaction ?? 'none'), voice: voiceById[d.voice] ? d.voice : null },
     by: origin,
     source: String(body.source ?? ''),
     why: `${String(body.why ?? '').slice(0, 120)} · played by ${origin}`,
@@ -226,6 +243,7 @@ function renderAgents() {
         <div class="row">
           <label>Busy <input type="range" data-k="level" min="0" max="3" value="${lvl(a)}" ${a.auto || !mine ? 'disabled' : ''}/> ${LEVELS[lvl(a)]}</label>
           <label><input type="checkbox" data-k="auto" ${a.auto ? 'checked' : ''}/> auto</label>
+          <label>Instrument <select data-k="voice" ${a.auto || !mine ? 'disabled' : ''}>${VOICES[a.role].map((v) => `<option value="${v.id}" ${(parts?.[a.role]?.d?.voice ?? a.voice) === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
           <label>Reg <select data-k="register">${[-1, 0, 1].map((r) => `<option value="${r}" ${a.register === r ? 'selected' : ''}>${r > 0 ? '+' : ''}${r}</option>`).join('')}</select></label>
         </div>
         <div class="why">${esc(parts?.[a.role]?.why ?? '')}</div>
@@ -243,6 +261,7 @@ $('agents').addEventListener('change', (e) => {
   if (k === 'level') a.level = Number(e.target.value);
   if (k === 'auto') a.auto = e.target.checked;
   if (k === 'register') a.register = Number(e.target.value);
+  if (k === 'voice') { a.voice = e.target.value; realAudio?.ensure(a.voice); }
   renderAgents();
 });
 

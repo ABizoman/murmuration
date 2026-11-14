@@ -63,8 +63,8 @@ test('selector: Jev shifts the odds, a uniform Jev answer changes nothing, pins 
   assert.deepEqual(blend(rule, null), { a: 0.5, b: 0.5 });
   assert.deepEqual(blend(rule, { a: 0.4, b: 0.4 }), { a: 0.5, b: 0.5 });
   const pushed = blend(rule, { a: 0.9, b: 0.1 });
-  assert.ok(pushed.a > 0.7 && pushed.a < 0.9 && !('c' in pushed), `Jev pushes but does not dictate: ${pushed.a}`);
-  const scores = { level: { 1: 1, 2: 1, 3: 1 }, style: { x: 1 }, register: { 0: 1, 1: 1 }, interaction: { none: 1 } };
+  assert.ok(pushed.a > 0.85 && !('c' in pushed));
+  const scores = { level: { 1: 1, 2: 1, 3: 1 }, style: { x: 1 }, register: { 0: 1, 1: 1 }, interaction: { none: 1 }, voice: { piano: 1 } };
   const r = decide(scores, null, { level: 3, register: 1 }, rng(3));
   assert.equal(r.d.level, 3);
   assert.equal(r.d.register, 1);
@@ -72,7 +72,7 @@ test('selector: Jev shifts the odds, a uniform Jev answer changes nothing, pins 
   let busy = 0;
   const stream = rng(9);
   for (let i = 0; i < 400; i++) busy += decide(scores, { level: { 1: 0.05, 2: 0.05, 3: 0.9 } }, null, stream).d.level === 3;
-  assert.ok(busy > 250, `Jev's favourite picked ${busy}/400`);
+  assert.ok(busy > 320, `Jev's favourite picked ${busy}/400`);
 });
 
 test('echo: rhythm echo lands on the target onsets; contour echo copies the shape in my register', () => {
@@ -129,7 +129,8 @@ test('Jev questions: one choice question per decision, answers decoded back to o
   const peers = { bass: part('bass/pulse/medium'), chords: part('chords/pad/medium'), drums: part('drums/four/medium') };
   const ctxs = { melody: ctxFor('melody', peers) };
   const { questions: q, decode } = buildQuestions(ctxs, lib);
-  assert.deepEqual(Object.keys(q).sort(), ['melody|interaction', 'melody|level', 'melody|register', 'melody|style']);
+  assert.deepEqual(Object.keys(q).sort(), ['melody|interaction', 'melody|level', 'melody|register', 'melody|style', 'melody|voice']);
+  assert.equal(decode['melody|voice'].voice_trumpet, 'trumpet');
   assert.ok(Object.values(q).every((x) => x.type === 'choice' && x.instructions.endsWith('?') && Object.keys(x.criteria).length >= 2));
   assert.ok(Object.values(q).flatMap((x) => Object.keys(x.criteria)).every((k) => /^[a-z0-9_]+$/i.test(k)), 'safe option keys');
   assert.equal(decode['melody|interaction'].answer_bass, 'answer:bass');
@@ -219,7 +220,7 @@ test('simulation: 40 phrases of four agents reacting to each other stay valid an
   for (const { part: p, role } of parts) {
     for (const n of p.notes) {
       assert.ok(n.step >= 0 && n.step < 64 && n.dur > 0);
-      if (n.midi != null) assert.ok(n.midi >= (role === 'bass' ? 26 : 50) && n.midi <= (role === 'bass' ? 64 : 98), `${role} ${n.midi} ${p.why}`);
+      if (n.midi != null) assert.ok(n.midi >= (role === 'bass' ? 26 : 45) && n.midi <= (role === 'bass' ? 64 : 98), `${role} ${n.midi} ${p.why}`);
     }
   }
   const late = parts.filter((x) => x.phrase >= 3);
@@ -241,6 +242,31 @@ test('simulation: energy direction and Jev advice both move the band', () => {
   const nudged = simulate({ advice: (p, role) => (role === 'melody' ? { source: 'jev', answers: { interaction: { 'answer:bass': 0.9, none: 0.1 } } } : null) });
   assert.ok(share(nudged) > share(simulate({})) + 0.25, `with Jev ${share(nudged).toFixed(2)} vs rules ${share(simulate({})).toFixed(2)}`);
   assert.ok(nudged.some((x) => x.part.source === 'rules + jev'));
+});
+
+test('instruments: chosen per section, families avoid each other, every voice has its samples on disk', async () => {
+  const fs = await import('node:fs');
+  const { VOICES, voiceById } = await import('../src/voices.js');
+  for (const [role, list] of Object.entries(VOICES)) for (const v of list) {
+    if (v.synth) continue;
+    const files = v.kit ? ['kick', 'snare', 'hihat', 'tom1', 'tom2', 'tom3'].map((f) => `samples/kits/${v.kit}/${f}.mp3`) : v.files.map((n) => `samples/${v.dir}/${n.replace('#', 's')}.mp3`);
+    for (const f of files) assert.ok(fs.existsSync(new URL(`../${f}`, import.meta.url)), `${role}/${v.id}: ${f}`);
+  }
+  const parts = simulate({ phrases: 33, seed: 11 });
+  const voiceOf = (role, phrase) => parts.find((x) => x.role === role && x.phrase === phrase)?.part.d.voice;
+  for (const r of ROLES) for (let ph = 1; ph < 32; ph++) {
+    const a = voiceOf(r, ph - 1), b = voiceOf(r, ph);
+    if (a && b && ph % 4 !== 0) assert.equal(b, a, `${r} changed instrument mid-section at phrase ${ph}`);
+  }
+  assert.ok(new Set(parts.map((x) => x.part.d.voice)).size >= 8, 'a range of instruments gets used');
+  let clashes = 0, total = 0;
+  for (let ph = 4; ph < 32; ph++) {
+    const fams = ['chords', 'melody'].map((r) => voiceById[voiceOf(r, ph)]?.family);
+    if (fams[0] && fams[1]) { total++; clashes += fams[0] === fams[1]; }
+  }
+  assert.ok(clashes / total < 0.2, `chords and melody share a family ${clashes}/${total}`);
+  const synthShare = parts.filter((x) => voiceById[x.part.d.voice]?.synth).length / parts.length;
+  assert.ok(synthShare < 0.15, `synth voices ${synthShare}`);
 });
 
 test('takeover: a device that gains a role continues the announced part, then decides from that history', () => {

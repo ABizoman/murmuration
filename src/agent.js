@@ -14,6 +14,7 @@ import { renderPhrase } from './render.js';
 import { ruleScores } from './decide/rules.js';
 import { decide } from './decide/select.js';
 import { applyInteraction } from './decide/transform.js';
+import { voiceById } from './voices.js';
 
 const LEVEL_NAMES = ['rest', 'sparse', 'medium', 'busy'];
 
@@ -25,6 +26,7 @@ export class Agent {
     this.auto = true; // false: level and register are pinned by hand
     this.level = 2;
     this.register = 0;
+    this.voice = null; // pinned instrument when auto is off
     this.prevVoicing = null;
   }
 
@@ -35,12 +37,13 @@ export class Agent {
   // ctx: from decide/context.js. advice: Jev's answer for this role and phrase, or null.
   compose(ctx, advice = null) {
     const scores = ruleScores(ctx, this.library);
-    const pins = this.auto ? null : { level: this.level, register: this.register };
+    const pins = this.auto ? null : { level: this.level, register: this.register, voice: this.voice };
     const { d, p, dist, usedJev } = decide(scores, advice?.answers, pins, this.random);
     const source = usedJev ? `rules + ${advice.source}` : 'rules';
     if (this.auto) {
       this.level = d.level;
       this.register = d.register;
+      this.voice = d.voice;
     }
     const reasons = scores.reasons.filter((r) => !r.when || r.when(d)).map((r) => r.text);
     const meta = { d, p, dist, source, reasons };
@@ -54,7 +57,7 @@ export class Agent {
     this.prevVoicing = base.voicing;
     const notes = applyInteraction(base.notes, d.interaction, ctx.peers, env);
 
-    const bits = [d.style, LEVEL_NAMES[d.level]];
+    const bits = [voiceById[d.voice]?.label ?? d.voice, d.style, LEVEL_NAMES[d.level]];
     if (d.register) bits.push(d.register > 0 ? 'high' : 'low');
     if (d.interaction !== 'none') bits.push(d.interaction.replace('echo:', 'echoes ').replace('answer:', 'answers '));
     return { notes, loop, ...meta, why: bits.join(' · ') };

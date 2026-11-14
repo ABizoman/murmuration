@@ -1,5 +1,6 @@
 // Offline decision rules. For each of the four choices an agent makes per phrase
-// (how busy, which pattern, which register, echo/answer someone), the rules give every option
+// (how busy, which pattern, which register, echo/answer someone) plus the instrument at the start
+// of each section, the rules give every option
 // a weight from what the other parts did. No network needed: this always works.
 //
 // Returns { level, style, register, interaction, reasons } where each of the four is
@@ -7,6 +8,9 @@
 // whether the final decision actually followed it.
 
 import { DEFAULT_DIRECTIVE } from './directive.js';
+import { VOICES, voiceById, DEFAULT_VOICE } from '../voices.js';
+
+export const SECTION_PHRASES = 4;
 
 export const ENTRY = { chords: 0, drums: 1, bass: 1, melody: 2 }; // song phrase each role enters at
 export const REGISTERS = { drums: [0], bass: [0, 1], chords: [-1, 0, 1], melody: [-1, 0, 1] };
@@ -126,5 +130,26 @@ export function ruleScores(ctx, library) {
     interaction[opt] = w;
   }
 
-  return { level, style, register, interaction, reasons };
+  // ---- 5. Which instrument (only at the start of a section) ----------------------
+  const voice = {};
+  const current = last?.voice && voiceById[last.voice] ? last.voice : null;
+  if (current && ctx.phrase % SECTION_PHRASES !== 0) {
+    voice[current] = 1; // keep it until the next section
+  } else {
+    const held = current ? Math.ceil(runLength(history, 'voice') / SECTION_PHRASES) : 0;
+    const taken = active.filter((p) => p.voice && voiceById[p.voice]).map((p) => voiceById[p.voice]);
+    for (const v of VOICES[role] || []) {
+      let w = (v.weight ?? 1) * Math.exp(-((v.energy - dir.energy) ** 2) / 0.15);
+      for (const t of taken) if (t.family === v.family) w *= 0.25;
+      if (dir.feature === role && v.lead) w *= 1.8;
+      if (v.id === current) w *= held >= 2 ? 0.5 : 2.2;
+      if (!current && v.id === DEFAULT_VOICE[role]) w *= 1.5;
+      voice[v.id] = w;
+    }
+    const clash = taken.find((t) => current && voiceById[current]?.family === t.family);
+    if (clash) reasons.push({ text: `${clash.label} is in the same family → changing instrument`, when: (d) => d.voice !== current });
+    if (current && held >= 2) reasons.push({ text: 'new section → new instrument', when: (d) => d.voice !== current });
+  }
+
+  return { level, style, register, interaction, voice, reasons };
 }

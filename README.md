@@ -12,6 +12,21 @@ Press **Start a song** on the first device; every other device shows **Join the 
 
 `npm test` runs the unit tests (Node only, no browser).
 
+## Instruments
+Every part is played by a sampled instrument (`src/voices.js`, `src/audio.js`, samples in `samples/`, credits in `CREDITS.md`):
+
+| part | instruments |
+|---|---|
+| drums | acoustic, breakbeat, LinnDrum, CR-78, techno, kit 8 (+ synth) |
+| bass | electric, upright, fretless, slap, tuba (+ synth) |
+| chords | grand piano, electric piano, nylon guitar, steel guitar, organ, choir, strings, brass section (+ synth) |
+| melody | trumpet, alto sax, tenor sax, French horn, trombone, clean/jazz/overdriven guitar, choir oohs (+ synth) |
+
+Each agent picks its instrument at the start of every section (4 phrases), with the same rules + Jev + sampling as its other choices:
+match the section's energy, avoid the same family as another part (no choir on chords and melody at once), favour lead sounds when featured,
+and change instrument after a couple of sections. Levels were set by measuring each part's loudness (LUFS) with the others muted.
+Untick "auto" on a card to pick an instrument by hand. Until a sample set has loaded, that part plays on the old synth.
+
 ## Phase 3: agents deciding from what their peers did
 
 For every phrase, each agent makes four choices from the shared score (what every part played last phrase):
