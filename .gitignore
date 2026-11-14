@@ -3,3 +3,5 @@ node_modules/
 .env
 ai-check.log
 packs-src/
+songs-local/*
+!songs-local/README.md

@@ -83,7 +83,9 @@
   #heroSub { margin:0; font:italic 24px/1.2 var(--serif); max-width:330px; color:var(--ink); }
   .song { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; font-size:13px; color:var(--ink-2); }
   #seed { height:34px; width:110px; padding:0 12px; border-radius:999px; border:1px solid rgba(23,15,46,.2); background:rgba(255,244,230,.45); color:var(--ink); font-size:16px; text-align:center; }
-  body.song-exists #seed { display:none; }
+  #song { height:34px; max-width:180px; padding:0 10px; border-radius:999px; border:1px solid rgba(23,15,46,.2);
+          background:rgba(255,244,230,.45); color:var(--ink); font-size:14px; text-align:center; }
+  body.song-exists #seed, body.song-exists #song { display:none; }
   #loading { margin:0; font-size:12px; color:var(--ink-2); }
 
   /* main.js's Start / Join / Leave button */
@@ -232,7 +234,7 @@
   </section>
   <button id="start" type="button">Start a song</button>
   <div class="hero hero-meta">
-    <div class="song"><span id="keyLineHero"></span><label class="sr" for="seed">Seed</label><input id="seed" value="durhack" size="9" aria-label="Seed" /></div>
+    <div class="song"><span id="keyLineHero"></span><label class="sr" for="song">Song</label><select id="song" aria-label="Song"></select><label class="sr" for="seed">Seed</label><input id="seed" value="durhack" size="9" aria-label="Seed" /></div>
     <p id="loading" hidden></p>
   </div>
 

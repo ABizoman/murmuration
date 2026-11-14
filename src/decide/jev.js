@@ -49,7 +49,7 @@ export function buildState(ctxs) {
   return [
     'A small band improvises together. Each part decides its next 4-bar phrase from what the others just played.',
     'Good ensemble playing: overall busyness matches the direction, parts leave each other room, registers do not collide, and parts imitate or answer each other now and then without repeating the same trick.',
-    `Song: ${s.key} ${s.mode}, ${s.bpm} bpm, chords ${s.progression.join(' ')}${s.mood ? `, mood: ${s.mood}` : ''}. Deciding phrase ${any.phrase + 1}.`,
+    `${s.song ? `Playing the song ${s.song.title} (${s.song.composer}), built up one part at a time. ` : ''}Song: ${s.key} ${s.mode}, ${s.bpm} bpm, chords ${s.progression.join(' ')}${s.mood && !s.song ? `, mood: ${s.mood}` : ''}. Deciding phrase ${any.phrase + 1}.`,
     `Direction for this section: ${describeDirective(any.directive || DEFAULT_DIRECTIVE)}.`,
     'What each part played last phrase (rhythm: 16 steps per bar, x = a note starts):',
     ...Object.entries(parts).map(([r, d]) => `- ${r}: ${d}`),

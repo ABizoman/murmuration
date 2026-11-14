@@ -3,6 +3,7 @@
 
 import { KEYS } from './theory.js';
 import { PACK_PROGRESSIONS } from './packs.js';
+import { songFromSeed } from './songs/index.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -41,6 +42,12 @@ export const PROGRESSIONS = {
 };
 
 export function structureFromSeed(seed) {
+  // "song:<id>" plays a fixed song: its own key, tempo and chords, and the agents build it up.
+  const song = songFromSeed(seed);
+  if (song) {
+    const { id, title, composer, build, voices, react } = song;
+    return { seed, key: song.key, mode: song.mode, bpm: song.bpm, progression: song.progression, mood: `${title} (${composer})`, song: { id, title, composer, build, voices, react: !!react } };
+  }
   const r = seededRandom(seed, 'structure');
   const mode = r() < 0.6 ? 'minor' : 'major';
   const key = KEYS[Math.floor(r() * 12)];
