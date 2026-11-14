@@ -27,6 +27,28 @@ match the section's energy, avoid the same family as another part (no choir on c
 and change instrument after a couple of sections. Levels were set by measuring each part's loudness (LUFS) with the others muted.
 Untick "auto" on a card to pick an instrument by hand. Until a sample set has loaded, that part plays on the old synth.
 
+## Loop packs
+On top of the hand-written loops, `src/packs/` holds loops built from three openly licensed sources (credits in `CREDITS.md`):
+
+| pack | what | how many |
+|---|---|---|
+| Groove MIDI (Magenta, CC BY 4.0) | real drummers: rock, funk, soul, hip-hop, latin, afro-cuban, reggae, gospel, punk, jazz, country, pop, New Orleans, dance, afrobeat | 360 two-bar grooves |
+| POP909 (MIT) | real pop melodies, bass lines and piano comping rhythms | 330 melodies, 235 bass lines, 180 comping rhythms |
+| free-midi-chords (MIT) | mood-tagged progressions and chord rhythms (pop, soul, hip-hop, offbeat) | 92 progressions, 12 rhythms |
+
+Every melodic loop is stored in scale degrees relative to the chord it was played over, so it fits whatever key and chords the seed picked.
+The seed now also picks a mood-tagged progression ("Nostalgic Hopeful", "Dark Mysterious"…); the mood is shown in the header and sent to Jev.
+Agents pick a pack style like any other pattern; a style is kept for a few phrases so the groove doesn't change every phrase.
+
+Rebuilding the packs (only needed to change them):
+```
+./fetch-groove.command                       # or: node tools/fetch-groove.mjs   (downloads Groove MIDI into packs-src/)
+git clone --depth 1 https://github.com/music-x-lab/POP909-Dataset packs-src/POP909-Dataset
+git clone --depth 1 https://github.com/ldrolez/free-midi-chords packs-src/free-midi-chords
+(cd packs-src && unzip -o groove-v1.0.0-midionly.zip)
+node tools/build-packs.mjs packs-src/groove packs-src/POP909-Dataset/POP909 packs-src/free-midi-chords
+```
+
 ## Phase 3: agents deciding from what their peers did
 
 For every phrase, each agent makes four choices from the shared score (what every part played last phrase):

@@ -78,18 +78,22 @@ export function ruleScores(ctx, library) {
     if (last?.level > 0) {
       level[last.level] *= runLength(history, 'level') >= 3 ? 0.4 : 1.4; // some inertia, then change
     }
-    level[0] = ctx.phrase >= ENTRY[role] + 2 && last?.level > 0 && role !== 'chords' ? 0.03 : 0; // a rare breath
+    level[0] = ctx.phrase >= ENTRY[role] + 2 && last?.level > 0 && role !== 'chords' ? 0.012 : 0; // a rare breath
   }
 
   // ---- 2. Which pattern ---------------------------------------------------------
   const style = {};
   for (const s of library.styles(role)) {
-    const e = STYLE_ENERGY[`${role}/${s}`] ?? 0.5;
-    style[s] = Math.exp(-((e - dir.energy) ** 2) / 0.12);
+    const e = STYLE_ENERGY[`${role}/${s}`] ?? library.styleEnergy?.(role, s) ?? 0.5;
+    style[s] = (library.styleWeight?.(role, s) ?? 1) * Math.exp(-((e - dir.energy) ** 2) / 0.12);
   }
   if (last?.style && last.style in style) {
+    // With many styles to choose from, "keep it" has to win most of the time or the groove
+    // changes every phrase: make the current style a fixed share of the total.
     const held = runLength(history, 'style');
-    style[last.style] *= held < 2 ? 3 : held >= 4 ? 0.5 : 1.2;
+    const others = Object.entries(style).filter(([k]) => k !== last.style).reduce((a, [, w]) => a + w, 0);
+    const share = held < 3 ? 0.8 : held < 6 ? 0.55 : 0.25;
+    style[last.style] = Math.max(style[last.style], (others * share) / (1 - share));
   }
 
   // ---- 3. Which register --------------------------------------------------------

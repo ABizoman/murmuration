@@ -9,5 +9,8 @@
   "dependencies": {
     "qrcode": "^1.5.4",
     "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@tonejs/midi": "^2.0.28"
   }
 }

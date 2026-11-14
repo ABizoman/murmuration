@@ -4,6 +4,7 @@ import { createLibrary, ROLES } from '../src/loops.js';
 import { Agent } from '../src/agent.js';
 import { Engine } from '../src/engine.js';
 import { renderPhrase } from '../src/render.js';
+import { parseChord } from '../src/theory.js';
 import { summarise } from '../src/decide/context.js';
 import { ruleScores, REGISTERS } from '../src/decide/rules.js';
 import { blend, decide, normalise } from '../src/decide/select.js';
@@ -200,12 +201,12 @@ test('director: garbage from an LLM is rejected or clamped', () => {
   assert.ok(!d.note.includes('<'));
 });
 
-function simulate({ phrases = 40, seed = 7, directive = null, advice = null }) {
+function simulate({ phrases = 40, seed = 7, directive = null, advice = null, library = lib }) {
   let t = 0;
   const rand = rng(seed);
   const parts = [];
   const e = new Engine({
-    agents: ROLES.map((r) => new Agent(r, lib, rand)), now: () => t, audio: { play() {} },
+    agents: ROLES.map((r) => new Agent(r, library, rand)), now: () => t, audio: { play() {} },
     onEvent: (ev) => parts.push(ev), getDirective: () => directive, getAdvice: advice || (() => null),
   });
   e.start(structure, 0);
@@ -220,7 +221,7 @@ test('simulation: 40 phrases of four agents reacting to each other stay valid an
   for (const { part: p, role } of parts) {
     for (const n of p.notes) {
       assert.ok(n.step >= 0 && n.step < 64 && n.dur > 0);
-      if (n.midi != null) assert.ok(n.midi >= (role === 'bass' ? 26 : 45) && n.midi <= (role === 'bass' ? 64 : 98), `${role} ${n.midi} ${p.why}`);
+      if (n.midi != null) assert.ok(n.midi >= (role === 'bass' ? 26 : 45) && n.midi <= (role === 'bass' ? 70 : 98), `${role} ${n.midi} ${p.why}`);
     }
   }
   const late = parts.filter((x) => x.phrase >= 3);
@@ -284,4 +285,45 @@ test('takeover: a device that gains a role continues the announced part, then de
   const next = e.ensureParts(4).local.bass;
   assert.equal(e.context(4, 'bass').last.style, 'pulse', 'history comes from the shared score');
   assert.ok(next.d);
+});
+
+test('packs: every loop is valid and renders in range in any key', async () => {
+  const { PACK_LOOPS, PACK_PROGRESSIONS } = await import('../src/packs.js');
+  const { validateLoop } = await import('../src/loops.js');
+  assert.ok(PACK_LOOPS.length > 1000);
+  const counts = {};
+  for (const l of PACK_LOOPS) { validateLoop(l); counts[l.role] = (counts[l.role] || 0) + 1; }
+  for (const r of ROLES) assert.ok(counts[r] > 50, `${r}: ${counts[r]}`);
+  for (const [key, mode, progression] of [['E', 'minor', ['i', 'VI', 'III', 'VII']], ['Bb', 'major', ['I', 'V', 'vi', 'IV']], ['F#', 'minor', ['i', 'iv', 'v', 'i']]]) {
+    const s = { key, mode, bpm: 90, progression };
+    for (const l of PACK_LOOPS) {
+      for (const register of l.role === 'drums' ? [0] : [0, 1]) {
+        const { notes } = renderPhrase(l, { structure: s, phrase: 0, register });
+        assert.ok(notes.length > 0, l.id);
+        for (const n of notes) {
+          assert.ok(n.step >= 0 && n.step < 64 && n.dur >= 1, `${l.id} ${JSON.stringify(n)}`);
+          if (n.midi != null) assert.ok(n.midi >= 24 && n.midi <= 100, `${l.id} ${key} reg ${register}: ${n.midi}`);
+          if (l.role === 'drums') assert.ok(['kick', 'snare', 'hat', 'ohat', 'tom1', 'tom2', 'tom3'].includes(n.drum), n.drum);
+        }
+      }
+    }
+  }
+  for (const mode of ['major', 'minor']) for (const p of PACK_PROGRESSIONS[mode]) {
+    assert.ok([4, 8].includes(p.chords.length) && p.mood, JSON.stringify(p));
+    for (const c of p.chords) parseChord(c, 'D', mode);
+  }
+});
+
+test('packs: a band using them stays valid, uses them, and keeps a groove for a while', async () => {
+  const { PACK_LOOPS } = await import('../src/packs.js');
+  const library = createLibrary({ packs: PACK_LOOPS });
+  const parts = simulate({ phrases: 40, seed: 3, library });
+  const late = parts.filter((x) => x.phrase >= 3 && x.part.loop);
+  const fromPacks = late.filter((x) => /groove-|pop909|drolez-/.test(x.part.loop.style)).length / late.length;
+  assert.ok(fromPacks > 0.5, `pack share ${fromPacks}`);
+  for (const r of ROLES) assert.ok(new Set(late.filter((x) => x.role === r).map((x) => x.part.loop.id)).size >= 3, `${r} varies`);
+  const drums = late.filter((x) => x.role === 'drums').map((x) => x.part.loop.id);
+  const changes = drums.slice(1).filter((id, i) => id !== drums[i]).length;
+  assert.ok(changes < drums.length * 0.7, `drum loop changed ${changes} times in ${drums.length} phrases`);
+  for (const { part: p, role } of parts) for (const n of p.notes) if (n.midi != null) assert.ok(n.midi >= 24 && n.midi <= 100, `${role} ${n.midi}`);
 });

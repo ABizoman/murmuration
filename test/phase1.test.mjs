@@ -31,7 +31,7 @@ test('degrees map to chord tones and scale tones', () => {
 test('seed only gives structure, deterministically', () => {
   const a = structureFromSeed('durhack'), b = structureFromSeed('durhack');
   assert.deepEqual(a, b);
-  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'key', 'mode', 'progression', 'seed']);
+  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'key', 'mode', 'mood', 'progression', 'seed']);
   const keys = new Set(Array.from({ length: 200 }, (_, i) => structureFromSeed(`s${i}`).key));
   assert.ok(keys.size >= 10, 'seeds spread over keys');
 });

@@ -32,6 +32,7 @@ export class Agent {
 
   reset() {
     this.prevVoicing = null;
+    this.lastLoopId = null;
   }
 
   // ctx: from decide/context.js. advice: Jev's answer for this role and phrase, or null.
@@ -49,7 +50,8 @@ export class Agent {
     const meta = { d, p, dist, source, reasons };
 
     if (d.level === 0) return { notes: [], ...meta, why: `resting${reasons[0] ? ` (${reasons[0]})` : ''}` };
-    const loop = this.library.find(this.role, d.style, DENSITIES[d.level - 1]);
+    const loop = this.library.find(this.role, d.style, DENSITIES[d.level - 1], { random: this.random, prefer: this.lastLoopId });
+    if (loop) this.lastLoopId = loop.id;
     if (!loop) return { notes: [], ...meta, why: `no "${d.style}" pattern in my library` };
 
     const env = { role: this.role, level: d.level, register: d.register, structure: ctx.structure, phrase: ctx.phrase };
@@ -57,7 +59,7 @@ export class Agent {
     this.prevVoicing = base.voicing;
     const notes = applyInteraction(base.notes, d.interaction, ctx.peers, env);
 
-    const bits = [voiceById[d.voice]?.label ?? d.voice, d.style, LEVEL_NAMES[d.level]];
+    const bits = [voiceById[d.voice]?.label ?? d.voice, d.style.replace(/^groove-/, '').replace(/^drolez-/, ''), LEVEL_NAMES[d.level]];
     if (d.register) bits.push(d.register > 0 ? 'high' : 'low');
     if (d.interaction !== 'none') bits.push(d.interaction.replace('echo:', 'echoes ').replace('answer:', 'answers '));
     return { notes, loop, ...meta, why: bits.join(' · ') };

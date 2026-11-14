@@ -2,6 +2,7 @@
 // Everything else (what each agent plays, how busy it is) is decided by the agents.
 
 import { KEYS } from './theory.js';
+import { PACK_PROGRESSIONS } from './packs.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -44,7 +45,8 @@ export function structureFromSeed(seed) {
   const mode = r() < 0.6 ? 'minor' : 'major';
   const key = KEYS[Math.floor(r() * 12)];
   const bpm = 78 + Math.floor(r() * 28); // 78-105
-  const list = PROGRESSIONS[mode];
-  const progression = list[Math.floor(r() * list.length)];
-  return { seed, key, mode, bpm, progression };
+  // The built-in progressions plus the mood-tagged ones from free-midi-chords.
+  const list = [...PROGRESSIONS[mode].map((chords) => ({ chords, mood: '' })), ...(PACK_PROGRESSIONS[mode] || [])];
+  const pick = list[Math.floor(r() * list.length)];
+  return { seed, key, mode, bpm, progression: pick.chords, mood: pick.mood };
 }

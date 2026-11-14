@@ -24,7 +24,13 @@ export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicin
       const base = { step: bar * 16 + e.step, dur: e.dur, vel: e.vel };
       if (loop.role === 'drums') notes.push({ ...base, drum: e.drum });
       else if (loop.role === 'chords') notes.push({ ...base, midis: voicing });
-      else notes.push({ ...base, midi: degreeToMidi(e.deg, e.oct, chord, anchor) });
+      else {
+        let midi = degreeToMidi(e.deg, e.oct, chord, anchor);
+        // keep pack lines that wander far from the anchor in a playable range
+        if (loop.role === 'bass') while (midi < 28) midi += 12;
+        while (midi > 100) midi -= 12;
+        notes.push({ ...base, midi });
+      }
     }
   }
   notes.sort((a, b) => a.step - b.step);

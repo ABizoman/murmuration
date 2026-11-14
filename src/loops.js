@@ -102,8 +102,9 @@ add('melody', 'call', 'busy', 4, P([
   [3, 0, 12, 0],
 ]));
 
-export function createLibrary() {
-  const loops = [...L];
+export function createLibrary({ packs = [] } = {}) {
+  const loops = [...L, ...packs];
+  const byStyle = (role, style) => loops.filter((l) => l.role === role && l.style === style);
   return {
     loops,
     add(loop) {
@@ -111,14 +112,23 @@ export function createLibrary() {
       loops.push(loop);
     },
     styles: (role) => [...new Set(loops.filter((l) => l.role === role).map((l) => l.style))],
-    find(role, style, density) {
-      const same = loops.filter((l) => l.role === role && l.style === style);
-      return (
-        same.find((l) => l.density === density) ||
-        // nearest density in the same style
-        same.sort((a, b) => Math.abs(DENSITIES.indexOf(a.density) - DENSITIES.indexOf(density)) - Math.abs(DENSITIES.indexOf(b.density) - DENSITIES.indexOf(density)))[0] ||
-        null
-      );
+    // Average energy of a style's loops (pack loops carry one), or null.
+    styleEnergy(role, style) {
+      const e = byStyle(role, style).map((l) => l.energy).filter((x) => typeof x === 'number');
+      return e.length ? e.reduce((a, b) => a + b, 0) / e.length : null;
+    },
+    styleWeight: (role, style) => byStyle(role, style)[0]?.weight ?? 1,
+    // A loop of this style at (or near) this density. Packs have many variants: keep `prefer`
+    // most of the time so a part doesn't change groove every phrase, otherwise pick one at random.
+    find(role, style, density, { random = Math.random, prefer = null } = {}) {
+      const same = byStyle(role, style);
+      if (!same.length) return null;
+      const dist = (l) => Math.abs(DENSITIES.indexOf(l.density) - DENSITIES.indexOf(density));
+      const best = Math.min(...same.map(dist));
+      const cands = same.filter((l) => dist(l) === best);
+      const kept = cands.find((l) => l.id === prefer);
+      if (kept && random() < 0.75) return kept;
+      return cands[Math.floor(random() * cands.length)];
     },
   };
 }

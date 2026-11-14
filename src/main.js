@@ -7,6 +7,7 @@ import { Engine } from './engine.js';
 import { createAudio } from './audio.js';
 import { importMidiFile } from './midi-import.js';
 import { Swarm } from './swarm/swarm.js';
+import { PACK_LOOPS } from './packs.js';
 import { Jev } from './decide/jev.js';
 import { Director, sectionOf, SECTION_PHRASES } from './decide/director.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './decide/directive.js';
@@ -19,7 +20,7 @@ const COLORS = Object.fromEntries(ROLES.map((r) => [r, css.getPropertyValue(`--$
 const LEVELS = ['silent', 'sparse', 'medium', 'busy'];
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
-const library = createLibrary();
+const library = createLibrary({ packs: PACK_LOOPS });
 const agents = ROLES.map((r) => new Agent(r, library));
 let realAudio = null;
 let tickTimer = null;
@@ -121,7 +122,7 @@ engine.myRoles = new Set();
 
 function showStructure(seed) {
   const s = structureFromSeed(seed);
-  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}`;
+  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.mood ? ` · ${s.mood}` : ''}`;
   return s;
 }
 $('seed').addEventListener('input', () => !swarm.song && showStructure($('seed').value));
