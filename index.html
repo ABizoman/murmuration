@@ -3,72 +3,97 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Murmuration · phase 1</title>
+<title>Murmuration</title>
 <script src="https://unpkg.com/tone@15.1.22/build/Tone.js"></script>
 <style>
   :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#e6e8ee; --dim:#8a90a0;
-          --drums:#f2a65a; --bass:#6fb3ff; --chords:#9b8cff; --melody:#5fd1a4; }
+          --drums:#f2a65a; --bass:#6fb3ff; --chords:#9b8cff; --melody:#5fd1a4; --ok:#5fd1a4; --bad:#ff6b6b; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:14px 18px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  h1 { font-size:16px; margin:0 8px 0 0; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:16px; margin:0 6px 0 0; }
   label { color:var(--dim); display:flex; gap:6px; align-items:center; }
   input, select, button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
-  input[type=number] { width:60px; }
-  button.primary { background:#3a5bff; border-color:#3a5bff; font-weight:600; padding:6px 16px; }
+  input[type=number] { width:56px; }
+  button.primary { background:#3a5bff; border-color:#3a5bff; font-weight:600; padding:7px 16px; }
+  button:disabled { opacity:.5; }
   #structure { font-weight:600; }
-  #status { margin-left:auto; color:var(--dim); font-variant-numeric:tabular-nums; }
-  main { padding:16px 18px; display:grid; gap:14px; }
+  #net { margin-left:auto; color:var(--dim); font-variant-numeric:tabular-nums; font-size:13px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; background:var(--dim); }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  main { padding:14px 16px; display:grid; gap:12px; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; }
-  .agents { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap:10px; }
+  .two { display:grid; grid-template-columns: 1fr 200px; gap:12px; }
+  @media (max-width: 700px) { .two { grid-template-columns: 1fr; } #qrPanel { display:none; } }
+  .agents { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; }
   .agent { border:1px solid var(--line); border-radius:8px; padding:8px 10px; display:grid; gap:6px; }
-  .agent .name { font-weight:600; display:flex; justify-content:space-between; }
+  .agent.mine { border-color:#4a5570; background:#1c2130; }
+  .agent .name { font-weight:600; display:flex; justify-content:space-between; gap:6px; }
+  .agent .who { font-weight:400; font-size:12px; color:var(--dim); }
   .agent .why { font:12px ui-monospace, monospace; color:var(--dim); min-height:1.4em; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  table { width:100%; border-collapse:collapse; font:12px ui-monospace, monospace; }
+  td, th { text-align:left; padding:3px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:400; }
+  #qr img { width:100%; display:block; }
+  #lanUrl { font:12px ui-monospace, monospace; color:var(--dim); word-break:break-all; margin-top:6px; }
   canvas { width:100%; display:block; }
-  #log { font:12px/1.5 ui-monospace, monospace; max-height:200px; overflow:auto; color:var(--dim); white-space:pre-wrap; }
+  #log { font:12px/1.5 ui-monospace, monospace; max-height:220px; overflow:auto; color:var(--dim); white-space:pre-wrap; }
   #log b { color:var(--text); }
+  #me { font-size:22px; font-weight:700; }
 </style>
 </head>
 <body>
 <header>
   <h1>Murmuration</h1>
-  <button id="start" class="primary">Start</button>
-  <label>Seed <input id="seed" value="durhack" size="10" /></label>
+  <button id="start" class="primary">Start a song</button>
+  <label>Seed <input id="seed" value="durhack" size="9" /></label>
   <span id="structure"></span>
-  <label>Compose ahead <input id="ahead" type="number" value="1" min="1" max="4" /> bar(s)</label>
-  <label><input id="auto" type="checkbox" checked /> agents choose their own busyness</label>
-  <span id="status">stopped</span>
+  <span id="net"></span>
 </header>
 
 <main>
-  <section class="panel">
-    <h2>Agents</h2>
-    <div class="agents" id="agents"></div>
-  </section>
+  <div class="two">
+    <section class="panel">
+      <h2>This device</h2>
+      <div class="row"><span id="me">…</span><span id="meRoles" style="color:var(--dim)"></span></div>
+      <h2 style="margin-top:12px">Agents</h2>
+      <div class="agents" id="agents"></div>
+    </section>
+    <section class="panel" id="qrPanel">
+      <h2>Join from a phone</h2>
+      <div id="qr"><img src="/qr.svg" alt="QR code to join" onerror="this.parentElement.textContent='Run node server.js to get a QR code.'" /></div>
+      <div id="lanUrl"></div>
+    </section>
+  </div>
 
   <section class="panel">
-    <h2>Now playing (top) · next phrase, already composed (bottom)</h2>
+    <h2>Now playing (top) · next phrase (bottom) · bright = this device, dim = other devices</h2>
     <canvas id="grid" height="380"></canvas>
   </section>
 
   <section class="panel">
-    <h2>Import MIDI pack loops (converted to scale degrees on import)</h2>
-    <div class="row">
-      <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
-      <label>Style <input id="mStyle" value="pack" size="8" /></label>
-      <label>Density <select id="mDensity"><option>sparse</option><option selected>medium</option><option>busy</option></select></label>
-      <label>File key <select id="mKey"></select></label>
-      <label>Mode <select id="mMode"><option>minor</option><option>major</option></select></label>
-      <label>Chords per bar <input id="mProg" value="i VI III VII" size="14" /></label>
-      <input id="mFile" type="file" accept=".mid,.midi" multiple />
-    </div>
+    <h2>Swarm</h2>
+    <table id="peers"></table>
   </section>
 
   <section class="panel">
     <h2>Log</h2>
     <div id="log"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Import MIDI pack loops (this device only for now)</h2>
+    <div class="row">
+      <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
+      <label>Style <input id="mStyle" value="pack" size="7" /></label>
+      <label>Density <select id="mDensity"><option>sparse</option><option selected>medium</option><option>busy</option></select></label>
+      <label>File key <select id="mKey"></select></label>
+      <label>Mode <select id="mMode"><option>minor</option><option>major</option></select></label>
+      <label>Chords per bar <input id="mProg" value="i VI III VII" size="12" /></label>
+      <input id="mFile" type="file" accept=".mid,.midi" multiple />
+    </div>
   </section>
 </main>
 

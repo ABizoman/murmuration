@@ -1,1 +1,13 @@
-{ "name": "murmuration", "private": true, "type": "module", "scripts": { "test": "node --test test/*.test.mjs", "serve": "python3 -m http.server 8000" } }
+{
+  "name": "murmuration",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.23.0"
+  }
+}

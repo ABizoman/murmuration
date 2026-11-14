@@ -44,6 +44,6 @@ export class Agent {
 
     const { notes, voicing } = renderPhrase(loop, { structure, phrase, register: this.register, prevVoicing: this.prevVoicing });
     this.prevVoicing = voicing;
-    return { notes, loop, why: `${loop.id}${this.register ? ` (register ${this.register > 0 ? '+' : ''}${this.register})` : ''}` };
+    return { notes, loop, register: this.register, level: this.level, why: `${loop.id}${this.register ? ` (register ${this.register > 0 ? '+' : ''}${this.register})` : ''}` };
   }
 }
