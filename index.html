@@ -3,171 +3,250 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#FFFFFF" />
-<title>Murmuration</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231E1B4B' stroke-width='2'%3E%3Ccircle cx='5' cy='12' r='2'/%3E%3Ccircle cx='12' cy='6' r='2'/%3E%3Ccircle cx='19' cy='12' r='2'/%3E%3Ccircle cx='12' cy='18' r='2'/%3E%3C/svg%3E" />
+<meta name="theme-color" content="#18143A" />
+<title>Murmuration · live</title>
 <script src="https://unpkg.com/tone@15.1.22/build/Tone.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" />
 <!--
-  Phone-first main screen. All behaviour comes from src/main.js, unchanged: every element id it
-  needs is kept below. src/ui/design.js only adds the orb, the grid aura, the status line and the
-  prompt box. classic.html is the original dense screen, driven by the very same src/main.js.
+  Murmuration Live. All behaviour comes from src/main.js, exactly as the other pages use it: every
+  element id main.js needs is below. src/live/app.js only draws the sky, the flock and the overlay.
 -->
 <style>
   :root {
-    /* main.js reads these four for the part colours */
-    --drums:#EA580C; --bass:#2563EB; --chords:#7C3AED; --melody:#059669;
-    --ink:#0F1222; --ink-2:#2A2E3D; --muted:#5B6070; --line:#E4E6EC; --soft:#F6F7FA;
-    --accent:#1E1B4B; --focus:#4338CA; --ok:#15803D; --bad:#B91C1C;
-    --ease: cubic-bezier(.2,.8,.2,1);
+    /* part colours, read by main.js and the flock: luminous, to glow on the dusk sky */
+    --drums:#FFB547; --bass:#5AC8FA; --chords:#C78BFF; --melody:#7CFFB2;
+    --ink:#170F2E; --ink-2:#3A2C52; --cream:#FFF4E6; --cream-2:rgba(255,244,230,.72);
+    --glass:rgba(22,16,44,.6); --glass-line:rgba(255,244,230,.16);
+    --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1);
+    --serif:"Instrument Serif", Georgia, serif; --uiw:620px;
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html, body { margin:0; background:#FFF; }
-  body { color:var(--ink); font:15px/1.45 Inter, system-ui, sans-serif; }
-  button, input, select { font:inherit; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#18143A; }
+  body { color:var(--cream); font:15px/1.45 Inter, system-ui, sans-serif; overscroll-behavior:none; }
+  button, input, select { font:inherit; color:inherit; }
   [hidden] { display:none !important; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  :focus-visible { outline:2px solid var(--cream); outline-offset:3px; }
 
-  /* One column on every screen: built for a phone, centred on a laptop */
-  .app { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;
-         padding:max(12px, env(safe-area-inset-top)) 16px 0; }
+  #sky { position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; display:block; touch-action:manipulation; }
+  /* film grain over everything */
+  .grain { position:fixed; inset:-50%; pointer-events:none; opacity:.09; mix-blend-mode:overlay; z-index:1;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation:grain 1.2s steps(6) infinite; }
+  @keyframes grain { 0%{transform:translate(0,0)} 33%{transform:translate(-4%,3%)} 66%{transform:translate(3%,-5%)} 100%{transform:translate(0,0)} }
 
-  header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 0 8px; }
-  h1 { margin:0; display:flex; align-items:center; gap:8px; font:600 18px 'Space Grotesk', Inter, sans-serif; letter-spacing:-.01em; }
-  .icon-btn { width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:#FFF; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+  .ui { position:fixed; inset:0; z-index:2; pointer-events:none; display:flex; flex-direction:column;
+        padding:max(10px, env(safe-area-inset-top)) 16px max(10px, env(safe-area-inset-bottom)); max-width:620px; margin:0 auto; }
+  .ui > * { pointer-events:auto; }
 
-  /* Stage */
-  .stage { flex:1 0 auto; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; padding:8px 0 4px; }
-  .orb-wrap { width:min(340px, 82vw, 46vh); aspect-ratio:1/1; transition:width .9s var(--ease); }
-  #orb { width:100%; height:100%; display:block; }
-  /* Only if WebGL is unavailable: a still stand-in so the stage is never an empty square. */
-  #orb.no-webgl { border-radius:50%; background:radial-gradient(circle at 38% 32%, #9C6BFE, #4C3BD6 45%, #141A8E 72%, rgba(20,26,142,0) 73%); }
-  #statusTitle { margin:4px 0 0; font:500 22px 'Space Grotesk', Inter, sans-serif; }
-  #statusSub { margin:0; color:var(--muted); font-size:14px; }
-  /* Instrument loading: worth saying while it is happening, noise once it is done. */
-  #samples { margin:0; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
-  .song { margin:2px 0 0; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; font-size:13px; color:var(--muted); }
-  #structure { color:var(--ink-2); font-weight:500; }
-  #seed { height:44px; width:104px; padding:0 10px; border:1px solid var(--line); border-radius:8px; background:#FFF; color:var(--ink); font-size:16px; }
-  #seed:disabled { background:var(--soft); color:var(--muted); border-color:transparent; width:auto; max-width:120px; }
-  #lastInstruction { margin:0; font-size:13px; color:var(--ink-2); max-width:420px; display:grid; gap:2px; }
-  #lastInstruction [data-k=summary], #lastInstruction [data-k=note] { color:var(--muted); }
-  /* Each half keeps to two lines so the echo can never push the aura under the prompt box. */
-  #lastInstruction [data-k=line], #lastInstruction [data-k=note] { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-  #lastInstruction [data-k=note]:empty { display:none; }
-  #start { margin-top:6px; height:48px; min-width:200px; padding:0 24px; border-radius:999px; border:0; background:var(--accent); color:#FFF; font-weight:600; font-size:16px; cursor:pointer; transition:background .3s; }
-  #start:disabled { opacity:.55; cursor:default; }
-  body.live #start { margin-top:2px; height:44px; min-width:0; padding:0 20px; background:#FFF; color:var(--ink-2); border:1px solid var(--line); font-weight:500; font-size:14px; }
+  /* header */
+  header { display:flex; align-items:center; gap:8px; min-height:48px; }
+  .brand { font:italic 26px/1 var(--serif); letter-spacing:.005em; margin-right:auto; display:flex; align-items:center; gap:8px; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:#FF5D73; box-shadow:0 0 0 0 rgba(255,93,115,.6); opacity:0; transition:opacity .4s; }
+  body.live .live-dot { opacity:1; animation:ping 1.6s infinite; }
+  @keyframes ping { 0%{box-shadow:0 0 0 0 rgba(255,93,115,.6)} 80%,100%{box-shadow:0 0 0 10px rgba(255,93,115,0)} }
+  .round { width:44px; height:44px; border-radius:50%; border:1px solid var(--glass-line); background:var(--glass); backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
+           display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .25s var(--spring); }
+  .round:active { transform:scale(.9); }
 
-  /* Grid aura: hidden until the song starts, then it opens under the orb */
-  .grid-card { width:100%; max-height:0; opacity:0; transform:translateY(16px); overflow:hidden;
-               transition:max-height 1s var(--ease), opacity .8s .15s ease, transform 1s var(--ease); }
-  #gridCaption { margin:0 0 6px; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  #stageGrid { width:100%; height:min(200px, 23vh); display:block; }
-  body.live .orb-wrap { width:min(200px, 52vw, 25vh); }
-  body.live .song { display:none; }
-  body.live .grid-card { max-height:260px; opacity:1; transform:none; }
-  /* Small phones: a smaller orb and a one-line note keep the four lanes on screen. */
-  @media (max-height: 740px) {
-    body.live .orb-wrap { width:min(150px, 40vw, 22vh); }
-    #lastInstruction [data-k=note] { -webkit-line-clamp:1; }
-    #statusTitle { font-size:20px; }
-  }
+  /* devices strip */
+  .room { display:flex; align-items:center; gap:10px; margin-top:6px; min-height:52px; }
+  #deviceCount { font-size:12px; color:var(--cream-2); white-space:nowrap; }
+  #devices { list-style:none; margin:0; padding:0; display:flex; gap:10px; overflow-x:auto; scrollbar-width:none; }
+  #devices::-webkit-scrollbar { display:none; }
+  #devices li { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; color:var(--cream-2); animation:popIn .6s var(--spring) both; }
+  #devices i { width:26px; height:26px; border-radius:50%; background:var(--ring); position:relative; display:block; transition:transform .12s ease-out; }
+  #devices i::after { content:''; position:absolute; inset:4px; border-radius:50%; background:rgba(24,18,52,.9); }
+  #devices li.me i::after { background:var(--cream); }
+  #devices li.relayed i { outline:1px dashed var(--cream-2); outline-offset:3px; }
+  #devices li.gone { opacity:.5; filter:grayscale(1); }
+  #devices li.gone i::before { content:'×'; position:absolute; inset:0; display:grid; place-items:center; color:#FF8A9A; z-index:1; font-size:14px; }
+  #devices.pulse li.playing i { animation:beatPop .32s ease-out; }
+  @keyframes beatPop { 0%{transform:scale(1.28)} 100%{transform:scale(1)} }
+  @keyframes popIn { from{transform:scale(.3); opacity:0} to{transform:none; opacity:1} }
 
-  /* Prompt box, always within thumb reach */
-  .composer-wrap { position:sticky; bottom:0; z-index:4; margin:0 -16px; padding:14px 16px max(12px, env(safe-area-inset-bottom));
-                   background:linear-gradient(rgba(255,255,255,0), #FFF 24%); }
-  #suggestions { display:flex; gap:8px; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; margin:0 -16px; padding:2px 16px 10px; }
+  /* toasts */
+  #toasts { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; align-items:flex-start; gap:6px; pointer-events:none; min-height:0; }
+  #toasts li { padding:8px 14px; border-radius:999px; background:var(--glass); border:1px solid var(--glass-line); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+               font-size:13px; animation:toastIn .5s var(--spring) both; transition:opacity .6s, transform .6s var(--ease); }
+  #toasts li.good { border-color:rgba(124,255,178,.5); }
+  #toasts li.warn { border-color:rgba(255,138,154,.6); }
+  #toasts li.out { opacity:0; transform:translateY(-8px); }
+  @keyframes toastIn { from{opacity:0; transform:translateX(-24px) scale(.9)} to{opacity:1; transform:none} }
+
+  .spacer { flex:1 1 auto; pointer-events:none; }
+
+  /* hero (before you join) */
+  .hero { text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; padding-bottom:16px; color:var(--ink); transition:opacity .6s, transform .8s var(--ease); }
+  #heroSub { margin:0; font:italic 24px/1.2 var(--serif); max-width:330px; color:var(--ink); }
+  .song { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; font-size:13px; color:var(--ink-2); }
+  #seed { height:34px; width:110px; padding:0 12px; border-radius:999px; border:1px solid rgba(23,15,46,.2); background:rgba(255,244,230,.45); color:var(--ink); font-size:16px; text-align:center; }
+  body.song-exists #seed { display:none; }
+  #loading { margin:0; font-size:12px; color:var(--ink-2); }
+
+  /* main.js's Start / Join / Leave button */
+  .hero-meta { padding:14px 0 18px; }
+  #start { align-self:center; position:relative; height:58px; min-width:230px; padding:0 30px; border-radius:999px; border:0; cursor:pointer; color:var(--cream); font-weight:600; font-size:17px; letter-spacing:.01em;
+           background:linear-gradient(135deg,#2A1B5C,#170F2E); box-shadow:0 10px 40px rgba(23,15,46,.45), inset 0 1px 0 rgba(255,255,255,.18);
+           transition:transform .3s var(--spring), box-shadow .3s; overflow:hidden; }
+  #start::before { content:''; position:absolute; inset:-2px; border-radius:inherit; padding:2px; background:conic-gradient(from var(--a,0deg), var(--drums), var(--chords), var(--bass), var(--melody), var(--drums));
+                   -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; animation:spin 3s linear infinite; }
+  @property --a { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+  @keyframes spin { to { --a:360deg; } }
+  #start:active { transform:scale(.95); }
+  #start:disabled { opacity:.6; cursor:default; }
+  body.live #start { position:fixed; top:max(14px, calc(env(safe-area-inset-top) + 4px)); right:calc(max(16px, (100vw - var(--uiw)) / 2 + 16px) + 104px); z-index:5; height:40px; min-width:0; padding:0 16px; font-size:14px; font-weight:500;
+                     background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid var(--glass-line); box-shadow:none; }
+  body.live #start::before { display:none; }
+
+  /* live info */
+  .now { display:none; color:var(--ink); padding:0 2px 10px; }
+  body.live .hero { display:none; }
+  body.live .now { display:block; animation:rise .9s var(--ease) both; }
+  @keyframes rise { from{opacity:0; transform:translateY(30px)} to{opacity:1; transform:none} }
+  #mood { margin:0; font:italic clamp(38px, 11vw, 64px)/.95 var(--serif); letter-spacing:-.01em; }
+  #mood span { display:inline-block; animation:letter .9s var(--ease) both; }
+  @keyframes letter { from{opacity:0; transform:translateY(.45em) rotate(6deg); filter:blur(8px)} to{opacity:1; transform:none; filter:none} }
+  .meta { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums; flex-wrap:wrap; }
+  #beatDots { display:inline-flex; gap:4px; }
+  #beatDots i { width:7px; height:7px; border-radius:50%; background:rgba(23,15,46,.2); transition:background .08s, transform .08s; }
+  #beatDots i.on { background:var(--ink); transform:scale(1.3); }
+  #keyLine { margin:4px 0 0; font-size:12px; color:var(--ink-2); }
+  #youLabel { margin:12px 0 6px; font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); }
+  #yourParts { list-style:none; margin:0; padding:0; display:flex; gap:8px; flex-wrap:wrap; }
+  #yourParts li { display:flex; align-items:baseline; gap:8px; padding:6px 14px 7px; border-radius:999px; background:rgba(23,15,46,.82); color:var(--cream); border:1px solid rgba(255,255,255,.08);
+                  box-shadow:0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent), 0 8px 30px color-mix(in srgb, var(--c) 30%, transparent); animation:popIn .6s var(--spring) both; }
+  #yourParts b { font:italic 20px/1.05 var(--serif); font-weight:400; color:var(--c); }
+  #yourParts span { font-size:12px; color:var(--cream-2); }
+  #lastInstruction { margin:8px 0 0; font-size:13px; color:var(--ink-2); }
+
+  /* ribbon + composer: one glass dock */
+  .dock { border-radius:26px; background:var(--glass); border:1px solid var(--glass-line); backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%);
+          padding:10px; box-shadow:0 20px 60px rgba(23,15,46,.35); }
+  .ribbon-wrap { display:none; }
+  body.live .ribbon-wrap { display:block; margin-bottom:8px; animation:rise .9s .1s var(--ease) both; }
+  #ribbon { width:100%; height:84px; display:block; }
+  #suggestions { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding:0 2px 8px; }
   #suggestions::-webkit-scrollbar { display:none; }
-  .chip { flex:0 0 auto; height:44px; padding:0 14px; border-radius:999px; border:1px solid var(--line); background:#FFF; font-size:14px; color:var(--ink-2); cursor:pointer; }
-  .chip:active { background:var(--soft); }
-  #composer { display:flex; align-items:center; gap:8px; padding:6px 6px 6px 18px; border:1px solid #DDE0E7; border-radius:28px; background:#FFF; box-shadow:0 8px 30px rgba(15,18,34,.08); }
-  #composer:focus-within { border-color:var(--focus); box-shadow:0 0 0 4px rgba(67,56,202,.12), 0 8px 30px rgba(15,18,34,.08); }
-  #prompt { flex:1 1 auto; min-width:0; height:44px; border:0; background:transparent; font-size:16px; color:var(--ink); }
-  #prompt::placeholder { color:#6B7080; }
+  .chip { flex:0 0 auto; height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--glass-line); background:rgba(255,244,230,.08); font-size:13px; cursor:pointer; transition:transform .25s var(--spring), background .2s; }
+  .chip:active { transform:scale(.92); background:rgba(255,244,230,.2); }
+  #composer { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 16px; border-radius:999px; background:rgba(255,244,230,.1); border:1px solid var(--glass-line); }
+  #composer:focus-within { background:rgba(255,244,230,.16); border-color:rgba(255,244,230,.4); }
+  #prompt { flex:1 1 auto; min-width:0; height:44px; border:0; background:transparent; font-size:16px; }
+  #prompt::placeholder { color:var(--cream-2); }
   #prompt:focus { outline:none; }
-  #send { width:44px; height:44px; flex:0 0 44px; border-radius:50%; border:0; background:var(--accent); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+  #send { width:44px; height:44px; flex:0 0 44px; border-radius:50%; border:0; cursor:pointer; background:var(--cream); display:inline-flex; align-items:center; justify-content:center; transition:transform .25s var(--spring); }
+  #send:active { transform:scale(.88) rotate(-12deg); }
 
-  /* Everything from the original screen, folded away below */
-  .more { display:grid; gap:10px; padding:8px 0 20px; }
-  details { border:1px solid var(--line); border-radius:16px; background:#FFF; }
-  details > summary { cursor:pointer; list-style:none; padding:14px 16px; font-weight:600; color:var(--ink-2); display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:48px; }
-  details > summary::-webkit-details-marker { display:none; }
-  details > summary::after { content:'+'; color:var(--muted); font-size:20px; font-weight:400; }
-  details[open] > summary::after { content:'–'; }
-  .details-body { padding:0 16px 16px; display:grid; gap:16px; }
-  /* Grid and flex children default to min-width:auto, so the swarm table would widen the page. */
-  .more, .more > *, .details-body, .details-body > *, .details-body section > * { min-width:0; }
-  h2 { margin:0 0 8px; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
-  .me-row { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
-  #me { font:600 18px 'Space Grotesk', Inter, sans-serif; }
-  #meRoles { color:var(--muted); font-weight:400; }
-  #net { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--muted); }
-  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
-
-  /* agent cards, written by main.js */
-  .agents { display:grid; gap:10px; }
-  .agent { border:1px solid var(--line); border-radius:12px; padding:12px; display:grid; gap:10px; background:#FFF; }
-  .agent.mine { border-color:#C7C2F2; background:#F7F6FE; }
+  /* the band sheet: everything main.js renders, on glass */
+  #scrim { position:fixed; inset:0; z-index:6; background:rgba(10,6,24,.4); opacity:0; pointer-events:none; transition:opacity .4s; }
+  #sheet.open ~ #scrim { opacity:1; pointer-events:auto; }
+  #sheet { position:fixed; left:0; right:0; bottom:0; z-index:7; max-width:620px; margin:0 auto; max-height:82vh; max-height:82dvh; overflow:auto; overscroll-behavior:contain;
+           background:rgba(20,14,40,.88); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); border:1px solid var(--glass-line); border-bottom:0; border-radius:28px 28px 0 0;
+           padding:10px 16px max(20px, env(safe-area-inset-bottom)); transform:translateY(105%); transition:transform .55s var(--ease); }
+  #sheet.open { transform:none; }
+  .grab { width:40px; height:5px; border-radius:3px; background:rgba(255,244,230,.3); margin:4px auto 10px; }
+  .sheet-head { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; }
+  .sheet-head h2 { margin:0 auto 0 0; font:italic 30px/1 var(--serif); font-weight:400; }
+  #me { font-weight:600; } #meRoles { color:var(--cream-2); font-size:13px; }
+  #structure, #net, #samples { display:block; font-size:12px; color:var(--cream-2); margin:2px 0; }
+  .agents { display:grid; gap:10px; margin:12px 0; }
+  .agent { border:1px solid var(--glass-line); border-radius:16px; padding:12px; display:grid; gap:10px; background:rgba(255,244,230,.05); }
+  .agent.mine { background:rgba(255,244,230,.1); border-color:rgba(255,244,230,.3); }
   .agent .name { font-weight:600; display:flex; justify-content:space-between; gap:6px; }
-  .agent .who { font-weight:400; font-size:12px; color:var(--muted); }
-  .agent .why { font-size:12px; color:var(--muted); min-height:1.4em; }
+  .agent .who { font-weight:400; font-size:12px; color:var(--cream-2); }
+  .agent .why { font-size:12px; color:var(--cream-2); min-height:1.4em; }
   .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  label { color:var(--muted); display:flex; gap:6px; align-items:center; min-height:44px; }
-  .agent input[type=range] { accent-color:var(--focus); width:110px; height:44px; }
-  .agent input[type=checkbox] { accent-color:var(--focus); width:18px; height:18px; }
-  select, .more input:not([type]), .more input[type=text] { height:44px; padding:0 8px; border:1px solid var(--line); border-radius:8px; background:#FFF; color:var(--ink); font-size:16px; }
-  .more input[type=file] { min-height:44px; }
-  #direction .why { color:var(--muted); font-size:12px; }
+  label { color:var(--cream-2); display:flex; gap:6px; align-items:center; min-height:36px; }
+  .agent input[type=range] { accent-color:var(--cream); width:110px; }
+  .agent input[type=checkbox] { accent-color:var(--cream); width:18px; height:18px; }
+  #sheet select, #sheet input:not([type]), #sheet input[type=text] { height:36px; padding:0 8px; border:1px solid var(--glass-line); border-radius:10px; background:rgba(255,244,230,.08); color:var(--cream); font-size:16px; }
+  #sheet select option { color:#170F2E; }
+  details { border-top:1px solid var(--glass-line); }
+  details > summary { cursor:pointer; list-style:none; padding:14px 2px; font-weight:600; display:flex; justify-content:space-between; min-height:48px; align-items:center; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::after { content:'+'; color:var(--cream-2); font-size:20px; font-weight:400; }
+  details[open] > summary::after { content:'–'; }
+  .hood { display:grid; gap:16px; padding-bottom:12px; }
+  .hood h3 { margin:0 0 6px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--cream-2); }
+  #direction .why { color:var(--cream-2); font-size:12px; }
   table { width:100%; border-collapse:collapse; font:12px ui-monospace, monospace; }
-  td, th { text-align:left; padding:6px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:400; }
-  #log { font:12px/1.6 ui-monospace, monospace; max-height:240px; overflow:auto; overflow-wrap:anywhere; color:var(--muted); white-space:pre-wrap; background:var(--soft); border-radius:10px; padding:10px; }
-  #log b { color:var(--ink); }
-  #grid { display:none; } /* the original grid; main.js still draws to it, the aura replaces it */
+  td, th { text-align:left; padding:6px; border-bottom:1px solid var(--glass-line); white-space:nowrap; }
+  th { color:var(--cream-2); font-weight:400; }
+  #log { font:12px/1.6 ui-monospace, monospace; max-height:220px; overflow:auto; color:var(--cream-2); white-space:pre-wrap; background:rgba(0,0,0,.25); border-radius:12px; padding:10px; }
+  #log b { color:var(--cream); }
+  #grid { display:none; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--cream-2); }
+  .dot.ok { background:#7CFFB2; } .dot.bad { background:#FF8A9A; }
 
-  /* Invite */
-  dialog { border:0; border-radius:20px; padding:24px; width:min(340px, 92vw); background:var(--ink); color:#E6E8EE; text-align:center; }
-  dialog::backdrop { background:rgba(15,18,34,.35); }
-  dialog h2 { margin:0 0 12px; font:500 20px 'Space Grotesk', Inter, sans-serif; text-transform:none; letter-spacing:0; color:#E6E8EE; }
+  /* invite */
+  dialog { border:0; border-radius:28px; padding:26px; width:min(340px, 92vw); background:#170F2E; color:var(--cream); text-align:center; box-shadow:0 30px 90px rgba(0,0,0,.5); }
+  dialog[open] { animation:popIn .5s var(--spring); }
+  dialog::backdrop { background:rgba(10,6,24,.55); backdrop-filter:blur(6px); }
+  dialog h2 { margin:0 0 14px; font:italic 32px/1 var(--serif); font-weight:400; }
   #qr img { width:100%; display:block; }
-  #lanUrl { font:12px ui-monospace, monospace; color:#B8BCC8; margin-top:10px; word-break:break-all; }
-  #inviteClose { margin-top:16px; height:44px; padding:0 20px; border-radius:999px; background:transparent; color:#E6E8EE; border:1px solid #3A3F52; cursor:pointer; }
+  #lanUrl { font:12px ui-monospace, monospace; color:var(--cream-2); margin-top:10px; word-break:break-all; }
+  .pill { margin-top:16px; height:44px; padding:0 22px; border-radius:999px; background:transparent; border:1px solid var(--glass-line); cursor:pointer; }
 
-  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; scroll-behavior:auto !important; } }
+  @media (min-width: 900px) {
+    .ui { max-width:1100px; display:grid; grid-template-columns:1fr 440px; grid-template-rows:auto auto 1fr auto; column-gap:40px; }
+    header, .room, #toasts { grid-column:1 / -1; }
+    .spacer { grid-column:1 / -1; }
+    .hero, #start { grid-column:1 / -1; }
+    :root { --uiw:1100px; }
+    .now { grid-column:1; align-self:end; padding-bottom:20px; }
+    .dock { grid-column:2; align-self:end; }
+    body:not(.live) .dock { grid-column:1 / -1; justify-self:center; width:min(560px, 100%); }
+    #mood { font-size:84px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
-<div class="app">
+<canvas id="sky" aria-label="A murmuration of starlings that moves with the music. Tap to scatter them." role="img"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="ui">
   <header>
-    <h1>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E1B4B" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.6 10.6 10.4 7.4M13.6 7.4l3.8 3.2M17.4 13.4l-3.8 3.2M10.4 16.6 6.6 13.4"/></svg>
-      Murmuration
-    </h1>
-    <button id="inviteBtn" class="icon-btn" type="button" aria-label="Invite a device">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2A2E3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h3M21 17v4"/></svg>
+    <div class="brand"><span class="live-dot" aria-hidden="true"></span>murmuration</div>
+    <button id="bandBtn" class="round" type="button" aria-label="The band: agents and details" aria-expanded="false" aria-controls="sheet">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFF4E6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+    </button>
+    <button id="inviteBtn" class="round" type="button" aria-label="Invite a device">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFF4E6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h3M21 17v4"/></svg>
     </button>
   </header>
 
-  <main class="stage" aria-label="Now playing">
-    <div class="orb-wrap"><canvas id="orb" role="img" aria-label="Orb that moves with the music this device is playing"></canvas></div>
-    <p id="statusTitle" aria-live="polite">Ready when you are</p>
-    <p id="statusSub"></p>
-    <p id="samples" hidden></p>
-    <p class="song"><span id="structure"></span><label class="sr" for="seed">Seed</label><input id="seed" value="durhack" size="9" aria-label="Seed" /></p>
-    <p id="lastInstruction" hidden><span data-k="line"><span data-k="text"></span> <span data-k="summary"></span></span><span data-k="note"></span></p>
-    <button id="start" type="button">Start a song</button>
+  <div class="room">
+    <ul id="devices" aria-label="Devices in the band"></ul>
+    <span id="deviceCount"></span>
+  </div>
+  <ul id="toasts" aria-live="polite"></ul>
 
-    <div class="grid-card">
-      <p id="gridCaption"></p>
-      <canvas id="stageGrid" role="img" aria-label="The music around now: notes slide right to left through the line in the middle"></canvas>
-    </div>
-  </main>
+  <div class="spacer"></div>
 
-  <div class="composer-wrap">
+  <section class="hero" aria-label="Join the band">
+    <p id="heroSub">A band with no conductor. Every phone is a player.</p>
+  </section>
+  <button id="start" type="button">Start a song</button>
+  <div class="hero hero-meta">
+    <div class="song"><span id="keyLineHero"></span><label class="sr" for="seed">Seed</label><input id="seed" value="durhack" size="9" aria-label="Seed" /></div>
+    <p id="loading" hidden></p>
+  </div>
+
+  <section class="now" aria-label="Now playing">
+    <h1 id="mood"></h1>
+    <div class="meta"><span id="beatDots" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="counter"></span></div>
+    <p id="keyLine"></p>
+    <p id="youLabel">You are playing</p>
+    <ul id="yourParts"></ul>
+    <p id="lastInstruction" hidden></p>
+  </section>
+
+  <div class="dock">
+    <div class="ribbon-wrap"><canvas id="ribbon" role="img" aria-label="The score around now, flowing through the line in the middle"></canvas></div>
     <div id="suggestions">
       <button class="chip" type="button" data-say="Busier">Busier</button>
       <button class="chip" type="button" data-say="Calm it down">Calm it down</button>
@@ -179,51 +258,53 @@
       <label for="prompt" class="sr">Tell your agent what to play</label>
       <input id="prompt" type="text" enterkeyhint="send" placeholder="Tell your agent what to play" />
       <button id="send" type="submit" aria-label="Send to your agent">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170F2E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
       </button>
     </form>
   </div>
-
-  <div class="more">
-    <details>
-      <summary><span class="me-row">Your agents <span id="me">…</span><span id="meRoles"></span></span></summary>
-      <div class="details-body"><div class="agents" id="agents"></div></div>
-    </details>
-
-    <details>
-      <summary>Under the hood</summary>
-      <div class="details-body">
-        <div id="net"></div>
-        <section><h2>Direction (voted by the swarm)</h2><div id="direction"></div></section>
-        <section><h2>Swarm</h2><div style="overflow-x:auto"><table id="peers"></table></div></section>
-        <section><h2>Log</h2><div id="log"></div></section>
-        <section>
-          <h2>Import MIDI pack loops</h2>
-          <div class="row">
-            <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
-            <label>Style <input id="mStyle" value="pack" size="7" /></label>
-            <label>Density <select id="mDensity"><option>sparse</option><option selected>medium</option><option>busy</option></select></label>
-            <label>File key <select id="mKey"></select></label>
-            <label>Mode <select id="mMode"><option>minor</option><option>major</option></select></label>
-            <label>Chords per bar <input id="mProg" value="i VI III VII" size="12" /></label>
-            <input id="mFile" type="file" accept=".mid,.midi" multiple />
-          </div>
-        </section>
-        <canvas id="grid" height="380"></canvas>
-      </div>
-    </details>
-  </div>
 </div>
 
+<aside id="sheet" aria-label="The band" aria-hidden="true">
+  <div class="grab" aria-hidden="true"></div>
+  <div class="sheet-head"><h2>The band</h2><button id="sheetClose" class="pill" type="button" style="margin:0">Close</button></div>
+  <div><span id="me">…</span> <span id="meRoles"></span></div>
+  <span id="structure"></span>
+  <span id="samples"></span>
+  <div class="agents" id="agents"></div>
+  <details>
+    <summary>Under the hood</summary>
+    <div class="hood">
+      <div id="net"></div>
+      <section><h3>Direction (voted by the swarm)</h3><div id="direction"></div></section>
+      <section><h3>Swarm</h3><div style="overflow-x:auto"><table id="peers"></table></div></section>
+      <section><h3>Log</h3><div id="log"></div></section>
+      <section>
+        <h3>Import MIDI pack loops</h3>
+        <div class="row">
+          <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
+          <label>Style <input id="mStyle" value="pack" size="7" /></label>
+          <label>Density <select id="mDensity"><option>sparse</option><option selected>medium</option><option>busy</option></select></label>
+          <label>File key <select id="mKey"></select></label>
+          <label>Mode <select id="mMode"><option>minor</option><option>major</option></select></label>
+          <label>Chords per bar <input id="mProg" value="i VI III VII" size="12" /></label>
+          <input id="mFile" type="file" accept=".mid,.midi" multiple />
+        </div>
+      </section>
+      <canvas id="grid" height="380"></canvas>
+    </div>
+  </details>
+</aside>
+<div id="scrim"></div>
+
 <dialog id="invite" aria-labelledby="inviteTitle">
-  <h2 id="inviteTitle">Join from a phone</h2>
+  <h2 id="inviteTitle">Bring a phone</h2>
   <div id="qr"><img src="/qr.svg" alt="QR code to join" onerror="this.parentElement.textContent='Run node server.js to get a QR code.'" /></div>
   <div id="lanUrl"></div>
-  <button id="inviteClose" type="button">Close</button>
+  <button id="inviteClose" class="pill" type="button">Close</button>
 </dialog>
 
-<!-- The app itself: the same file classic.html runs. Then the design layer. -->
+<!-- The app itself: the same main.js the other pages run. Then the design layer. -->
 <script type="module" src="./src/main.js"></script>
-<script type="module" src="./src/ui/design.js"></script>
+<script type="module" src="./src/live/app.js"></script>
 </body>
 </html>
