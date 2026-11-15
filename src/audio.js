@@ -11,7 +11,7 @@
 
 import { VOICES, voiceById, DRUM_FILES } from './voices.js';
 import { newMeters, addMeterSample } from './listen.js';
-import { MIX, DRUM_STRIP, mixFor, isWeakDevice, dbToGain } from './mix.js';
+import { MIX, DRUM_STRIP, PUMP, mixFor, isWeakDevice, dbToGain } from './mix.js';
 
 const Tone = window.Tone;
 const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D3', tom2: 'B2', tom3: 'G2' };
@@ -41,9 +41,9 @@ const stripFiles = (strip) => DRUM_FILES.concat('ohat').filter((f) => DRUM_STRIP
 // while its samples are still loading. Level: ROLE_GAIN[role] + PATCH_DB + the voice's `gain`
 // (measured with `npm run measure-levels -- --roles <role> --extra voice=<role>:<id>`), so moving
 // ROLE_GAIN moves a whole part, samples and synths alike. The drum patch keeps its own levels.
-export const PATCH_ROLE = { drums: 'drums', bass: 'bass', pad: 'chords', keys: 'chords', lead: 'melody', pluck: 'melody' };
+export const PATCH_ROLE = { drums: 'drums', house: 'drums', bass: 'bass', pad: 'chords', keys: 'chords', stab: 'chords', lead: 'melody', pluck: 'melody', riff: 'melody' };
 export const ROLE_PATCH = { drums: 'drums', bass: 'bass', chords: 'pad', melody: 'lead' }; // fallback while loading
-const PATCH_DB = { bass: -23, pad: -31, keys: -25, lead: -25.5, pluck: -23.5 };
+const PATCH_DB = { bass: -23, pad: -31, keys: -25, lead: -25.5, pluck: -23.5, stab: -28, riff: -25 };
 // The kits have no crash sample: the crash and the riser are always synthesised, into the hats strip.
 export const FX_DB = { crash: -16, riserFrom: -36, riserTo: -18 };
 
@@ -95,9 +95,10 @@ const PATCHES = {
     const env = { attack: 0.005, decay: 0.2, sustain: 0.8, release: 0.12 };
     const sub = new Tone.MonoSynth({ oscillator: { type: 'sine' }, portamento: 0.02, envelope: env,
       filterEnvelope: { attack: 0.005, decay: 0.1, sustain: 1, release: 0.12, baseFrequency: 2000, octaves: 0 } }).connect(out);
-    sub.volume.value = -6;
+    sub.volume.value = -2; // a deep sub you feel more than hear
     const saw = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, portamento: 0.02, envelope: env, filter: { type: 'lowpass', Q: 1 },
-      filterEnvelope: { attack: 0.005, decay: 0.12, sustain: 0.3, release: 0.12, baseFrequency: 250, octaves: 2.5 } }).connect(out);
+      filterEnvelope: { attack: 0.005, decay: 0.1, sustain: 0.25, release: 0.12, baseFrequency: 180, octaves: 2 } }).connect(out);
+    saw.volume.value = -3;
     return {
       play(n, t, d, v, freq) {
         saw.triggerAttackRelease(freq(n.midi), d, t, v);
@@ -145,6 +146,58 @@ const PATCHES = {
       },
     };
   },
+};
+
+// ---- dance patches -------------------------------------------------------------------
+// The classic house sounds: a synthesised kit (deep kick, handclap, crisp hats), a chord stab and a
+// riff synth. The stab and the riff get their polish from a filter envelope: each note starts
+// bright and the filter snaps shut within ~0.2 s, so they are punchy but never harsh.
+PATCHES.house = (strip, out, gainDb = 0) => {
+  const v = (db) => db + gainDb;
+  const kick = new Tone.MembraneSynth({ pitchDecay: 0.045, octaves: 5, oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.45, sustain: 0, release: 0.1 } }).connect(strip.kick);
+  kick.volume.value = v(-4);
+  const clap = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 } })
+    .connect(new Tone.Filter({ type: 'bandpass', frequency: 1500, Q: 0.8 }).connect(strip.body));
+  clap.volume.value = v(-6);
+  const hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.035, sustain: 0 } })
+    .connect(new Tone.Filter(8000, 'highpass').connect(strip.hats));
+  hat.volume.value = v(-16);
+  const ohat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.002, decay: 0.24, sustain: 0 } })
+    .connect(new Tone.Filter(7000, 'highpass').connect(strip.hats));
+  ohat.volume.value = v(-17);
+  const tom = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 2, envelope: { attack: 0.001, decay: 0.3, sustain: 0 } }).connect(strip.body);
+  tom.volume.value = v(-8);
+  const TOM_NOTE = { tom1: 'D2', tom2: 'B1', tom3: 'G1' };
+  return {
+    play(n, t, d, vel, freq, sSec, fallback) {
+      const drum = n.drum === 'hihat' ? 'hat' : n.drum;
+      if (drum === 'kick') kick.triggerAttackRelease('G1', 0.4, t, vel);
+      else if (drum === 'snare' || drum === 'clap' || drum === 'rim') {
+        // a handclap is a few hands a few ms apart
+        clap.triggerAttackRelease(0.02, t, vel * 0.6);
+        clap.triggerAttackRelease(0.02, t + 0.011, vel * 0.7);
+        clap.triggerAttackRelease(0.2, t + 0.022, vel);
+      } else if (drum === 'hat') hat.triggerAttackRelease(0.05, t, vel);
+      else if (drum === 'ohat' || drum === 'ride') ohat.triggerAttackRelease(0.25, t, vel);
+      else if (TOM_NOTE[drum]) tom.triggerAttackRelease(TOM_NOTE[drum], 0.3, t, vel);
+      else fallback?.(); // crash, riser: the standard synth drums
+    },
+  };
+};
+
+PATCHES.stab = (strip, out) => {
+  const synth = new Tone.PolySynth(Tone.MonoSynth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 3, spread: 30 },
+    envelope: { attack: 0.003, decay: 0.3, sustain: 0.25, release: 0.2 }, filter: { type: 'lowpass', Q: 1 },
+    filterEnvelope: { attack: 0.002, decay: 0.22, sustain: 0.15, release: 0.2, baseFrequency: 300, octaves: 3 } }).connect(out);
+  return poly(synth);
+};
+
+PATCHES.riff = (strip, out) => {
+  const synth = new Tone.PolySynth(Tone.MonoSynth, { maxPolyphony: 4, oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.003, decay: 0.25, sustain: 0.15, release: 0.15 }, filter: { type: 'lowpass', Q: 2 },
+    filterEnvelope: { attack: 0.002, decay: 0.16, sustain: 0.05, release: 0.12, baseFrequency: 350, octaves: 3.2 } }).connect(out);
+  return poly(synth);
 };
 
 // A polyphonic patch plays chords (one trigger per pitch, strummed by `offsets`) or single notes.
@@ -233,8 +286,10 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
     if (patches[name]) return patches[name];
     const role = PATCH_ROLE[name];
     const owner = Object.values(VOICES).flat().find((v) => v.synth === name);
-    const out = name === 'drums' ? null : new Tone.Gain(dbToGain((ROLE_GAIN[role] ?? 0) + (PATCH_DB[name] ?? -25) + (owner?.gain ?? 0))).connect(strip[role]);
-    return (patches[name] = PATCHES[name](strip, out));
+    // Kits route each drum to its own strip and set their own levels (plus the voice's gain).
+    const kit = PATCH_ROLE[name] === 'drums';
+    const out = kit ? null : new Tone.Gain(dbToGain((ROLE_GAIN[role] ?? 0) + (PATCH_DB[name] ?? -25) + (owner?.gain ?? 0))).connect(strip[role]);
+    return (patches[name] = PATCHES[name](strip, out, owner?.gain ?? 0));
   }
   const freq = (m) => Tone.Frequency(m, 'midi').toFrequency();
   const noteName = (m) => Tone.Frequency(m, 'midi').toNote();
@@ -252,11 +307,12 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
   }
 
   // The pop "pump": every kick dips the bass and chord buses, which come back over 120 ms.
+  let pump = PUMP.normal;
   function duckAt(t) {
     for (const [name, g] of Object.entries(ducks)) {
       g.gain.cancelScheduledValues(t);
-      g.gain.setValueAtTime(dbToGain(mix.buses[name].duck), t);
-      g.gain.linearRampToValueAtTime(1, t + MIX.duckMs / 1000);
+      g.gain.setValueAtTime(dbToGain(pump[name] ?? mix.buses[name].duck), t);
+      g.gain.linearRampToValueAtTime(1, t + pump.ms / 1000);
     }
   }
 
@@ -368,7 +424,7 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
   function playSynth(role, n, t, d, sSec, voiceId) {
     const name = patchFor(voiceId, role);
     const dur = role === 'drums' ? d : d * 0.95;
-    patch(name).play(n, t, dur, gainOf(n.vel), freq, sSec);
+    patch(name).play(n, t, dur, gainOf(n.vel), freq, sSec, () => patch('drums').play(n, t, dur, gainOf(n.vel), freq, sSec));
   }
 
   function toAudioTime(epochMs) {
@@ -391,6 +447,9 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
     resetMeters: () => { meters = newMeters(); },
     isLite: () => isLite,
     setLite,
+    // 'normal' or 'dance' (mix.js PUMP): how hard every kick ducks the bass and the chords.
+    setPump: (name) => { pump = PUMP[name] || PUMP.normal; },
+    pump: () => pump,
     dispose: () => clearInterval(metering), // only the tests need this; the page lives as long as the tab
     play(role, n, whenMs, durMs, voiceId, stepMs = 0) {
       const t = Math.max(toAudioTime(whenMs), raw.currentTime);

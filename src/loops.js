@@ -71,11 +71,31 @@ add('chords', 'stabs', 'sparse', 1, R([[0, 0, 3, 0.75]]), { voicing: 3 });
 add('chords', 'stabs', 'medium', 1, R([[0, 0, 3, 0.8], [0, 6, 2, 0.6], [0, 10, 3, 0.7]]), { voicing: 3 });
 add('chords', 'stabs', 'busy', 1, R([[0, 0, 2, 0.8], [0, 3, 2, 0.55], [0, 6, 2, 0.7], [0, 10, 2, 0.6], [0, 14, 2, 0.5]]), { voicing: 3 });
 
-// --- Melody: riffs (dance). One bar, chord notes only (root, third, fifth, octave), repeated over
-// the chords: a small range and a lot of repetition, like a dance-floor hook.
-add('melody', 'riff', 'sparse', 1, P([[0, 4, 2, 4, 0.75], [0, 8, 6, 2, 0.65]]), { energy: 0.35 });
-add('melody', 'riff', 'medium', 1, P([[0, 0, 2, 0, 0.8], [0, 3, 2, 2, 0.6], [0, 6, 2, 4, 0.7], [0, 10, 4, 2, 0.65]]), { energy: 0.55 });
-add('melody', 'riff', 'busy', 1, P([[0, 0, 2, 4, 0.8], [0, 2, 2, 2, 0.6], [0, 6, 2, 4, 0.7], [0, 8, 2, 0, 0.75], [0, 11, 2, 2, 0.6], [0, 14, 2, 4, 0.65]]), { energy: 0.75 });
+// --- Melody: riffs (dance). Chord notes only (root, third, fifth, octave), repeated over the
+// chords: a small range and a lot of repetition, like a dance-floor hook. Generated (below) from a
+// set of syncopated rhythms and note shapes, so the band has a few dozen to choose from; the hook
+// book (hooks.js) then keeps one riff for the whole song.
+const RIFF_RHYTHMS = [
+  [0, 3, 6, 10, 13], [0, 3, 6, 8, 11, 14], [0, 2, 4, 7, 10, 12], [2, 6, 10, 14], [0, 3, 6, 10, 12, 14],
+  [0, 4, 6, 10, 14], [1, 4, 7, 10, 13], [0, 2, 6, 8, 11], [0, 3, 8, 11], [0, 6, 8, 14], [2, 4, 8, 10, 13], [0, 3, 6, 9, 12],
+];
+const RIFF_SHAPES = [[0, 2, 4, 2, 0, 4], [4, 2, 0, 2, 4, 7], [0, 4, 7, 4, 2, 0], [7, 4, 2, 4, 7, 4], [2, 4, 2, 0, 2, 4]];
+RIFF_RHYTHMS.forEach((steps, ri) => {
+  RIFF_SHAPES.forEach((shape, si) => {
+    if ((ri + si) % 2) return; // 30 riffs: every other combination
+    const rows = [];
+    for (let bar = 0; bar < 2; bar++) {
+      steps.forEach((step, k) => {
+        const next = steps[k + 1] ?? 16;
+        // bar 2 answers bar 1: the same rhythm, the last note goes somewhere else
+        const deg = bar === 1 && k === steps.length - 1 ? shape[(k + 2) % shape.length] : shape[k % shape.length];
+        rows.push([bar, step, Math.max(1, Math.min(3, next - step)), deg, k === 0 ? 0.82 : step % 4 === 0 ? 0.72 : 0.64]);
+      });
+    }
+    const density = steps.length <= 4 ? 'sparse' : steps.length <= 5 ? 'medium' : 'busy';
+    L.push({ id: `melody/riff/${density}/${ri}-${si}`, role: 'melody', style: 'riff', density, bars: 2, events: P(rows), energy: { sparse: 0.35, medium: 0.55, busy: 0.75 }[density] });
+  });
+});
 
 // --- Melody (4 bars: question in bars 0-1, answer in bars 2-3) ---------------
 add('melody', 'motif', 'sparse', 4, P([

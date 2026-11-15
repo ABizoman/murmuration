@@ -47,6 +47,14 @@ export const MIX = {
   duckMs: 120, // how long the bass and chords take to come back up after a kick
 };
 
+// How hard the kick ducks the bass and chords (the "pump"), per style: 'normal' is the mix above;
+// 'dance' is the deep, breathing pump of house music. Chosen from the shared structure (the style,
+// or a song's `pump`), so every device pumps the same.
+export const PUMP = {
+  normal: { bass: MIX.buses.bass.duck, chords: MIX.buses.chords.duck, ms: MIX.duckMs },
+  dance: { bass: -10, chords: -7, ms: 220 },
+};
+
 // Which strip each drum goes to. Anything missing here would fall back to the synth, so the tests
 // check this against every drum the loop library can produce.
 export const DRUM_STRIP = {

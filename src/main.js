@@ -2,6 +2,7 @@ import { KEYS } from './theory.js';
 import { structureFromSeed, randomFor, parseSeed, withEnd, withStyle } from './seed.js';
 import { formFromStructure, formDirective, describeSection } from './form.js';
 import { HookBook } from './hooks.js';
+import { STYLE_FAMILIES } from './styles.js';
 import { localNow, STEPS_PER_PHRASE } from './clock.js';
 import { createLibrary, ROLES } from './loops.js';
 import { Agent, CANDIDATES, CANDIDATES_LITE } from './agent.js';
@@ -214,7 +215,10 @@ $('song').innerHTML = `<option value="">Improvise (from the seed)</option>` +
 $('song').addEventListener('change', () => {
   if (swarm.song) return;
   $('seed').disabled = !!$('song').value;
-  showStructure(chosenSeed());
+  // A fresh seed on every page load (new key, tempo and chords each time you start improvising),
+// unless ?seed=<text> asks for one. Type a seed in the Menu to play the same song again.
+$('seed').value = params.get('seed') || `durhack-${Math.random().toString(36).slice(2, 6)}`;
+showStructure(chosenSeed());
 });
 function showSeed(seed) {
   const { base, end, style } = parseSeed(seed);
@@ -237,6 +241,8 @@ showStructure(chosenSeed());
 function playSong(song) {
   const structure = showStructure(song.seed);
   form = formFromStructure(structure);
+  // The pump (how hard the kick ducks the bass and chords) follows the style or the song.
+  realAudio?.setPump(SONGS[structure.song?.id]?.pump ?? STYLE_FAMILIES[structure.family]?.pump ?? 'normal');
   if (formSeed !== song.seed) hookBook.clear(); // a different song: its hooks are not ours
   formSeed = song.seed;
   showSeed(song.seed);

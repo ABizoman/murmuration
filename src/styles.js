@@ -53,13 +53,14 @@ STYLE_FAMILIES.dance = {
     melody: { riff: 3, motif: 1, call: 0.5, pop909: 0.2 },
   },
   voices: {
-    drums: { 'kit-linn': 2, 'kit-8': 2, 'kit-breakbeat': 1.5, 'kit-techno': 0.8 },
-    bass: { 'synth-bass': 3, 'bass-electric': 1 },
-    chords: { 'synth-pad': 2.5, 'keys-epiano': 2, 'synth-keys': 2, 'keys-piano': 0.8 },
-    melody: { 'synth-pluck': 2.5, 'synth-lead': 2, 'melody-epiano': 1.5, 'voice-oohs': 0.5 },
+    drums: { 'kit-house': 4, 'kit-linn': 1, 'kit-8': 1 },
+    bass: { 'synth-bass': 3, 'bass-electric': 0.6 },
+    chords: { 'synth-stab': 3, 'synth-pad': 2.5, 'keys-epiano': 1.5, 'synth-keys': 1.5 },
+    melody: { 'synth-riff': 3.5, 'synth-pluck': 2, 'synth-lead': 1.5, 'melody-epiano': 1 },
   },
   continuity: { melody: [0.6, 1] }, // fit.js: a riff may repeat itself
   maxLevel: { melody: 2 }, // rules.js: the melody stays simple, even in the chorus
+  pump: 'dance', // mix.js PUMP: the kick ducks the bass and chords hard
   unlisted: 0.03,
   unlistedVoices: 0.004, // a trumpet in a dance track: almost never
 };

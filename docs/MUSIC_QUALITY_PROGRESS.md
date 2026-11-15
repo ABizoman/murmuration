@@ -731,3 +731,32 @@ and treble boosts on the lead and the master.
       lowpass (2200 in `PATCHES.pluck`) or the lead's `baseFrequency` (900).
 - [ ] Improvise in Dance (`/?rng=dance1`): does it have the feel you wanted?
 - [ ] Murmur (dance) on the speakers: `/?demo=murmur`.
+
+## Dance sound overhaul (after "it doesn't feel closer to Alors on danse")
+
+The listener's answers: the instruments sound cheap, there is no catchy riff, the bass is weak or
+plain, the beat is wrong, and it is too happy or bright. So:
+
+- **A synthesised house kit** `kit-house` (`PATCHES.house`): deep sine kick with a fast pitch
+  drop, a handclap (three noise bursts 11 ms apart through a 1.5 kHz bandpass) for snares and claps,
+  crisp closed and open hats, membrane toms; crash and riser from the standard synth drums.
+- **The pump** (`mix.js` `PUMP`, `audio.setPump`): `dance` ducks the bass −10 dB and the chords
+  −7 dB on every kick, back over 220 ms (normal: −4 / −2 / 120 ms). Chosen in `playSong` from the
+  song's `pump` or the style's (dance), so every device pumps alike.
+- **Riff and stab synths** (`synth-riff`, `synth-stab`): saw waves whose filter snaps shut within
+  ~0.2 s of each note (the "pluck" of dance music); the stab is three detuned saws. **Deeper synth
+  bass**: the sine sub up 4 dB, the saw darker. Gains measured (kit −4.5, bass −6, stab 16.5,
+  riff 10.5); the full Murmur demo peaks at −3.7 dBFS, 0 clips.
+- **Dance style voices** now prefer the house kit, synth bass, stab/pad and the riff synth.
+- **Murmur rewritten** (`src/songs/murmur.js`): Am – Am – Dm – Em (minor v: darker), a syncopated
+  3+3+2 riff that runs from the pre-chorus to the end, a moving bass groove, off-beat stabs, the
+  house kit with claps on 2 and 4, light shuffle (0.03), the dance pump. Clash 1.00 for every part.
+- **Variety** (the listener: "it always goes with the same melody, even after reloading"):
+  30 generated riffs (12 syncopated rhythms × 5 shapes, chord notes only) instead of 3, and a fresh
+  seed on every page load (`?seed=` to choose one). The demo and `?rng=` runs stay identical on
+  purpose.
+- Tests: **147 passing**.
+
+### Needs ears
+- [ ] `?demo=murmur`: closer? Which of beat / bass / riff / sounds still feels off?
+- [ ] The pump depth (−10 / −7 dB): too much "breathing"?

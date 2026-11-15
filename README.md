@@ -35,6 +35,7 @@ Other switches for listening work:
 | `?rng=test1` | fixes every agent's random stream: same seed + same rng = same music |
 | `?solo=bass` | hears one part on its own (`drums`, `bass`, `chords`, `melody`) — how `ROLE_GAIN` is measured |
 | `?lite=1` / `?lite=0` | forces the lite mix on or off instead of deciding from the device |
+| `?seed=durhack` | start from this seed (otherwise every page load picks a fresh one, so each improvised song is new) |
 | `?voice=chords:synth-pad` | pins one part's instrument (comma-separate several: `?voice=bass:synth-bass,melody:synth-pluck`); everything else stays automatic. With `?solo=` it is how a voice's `gain` is measured |
 | `?feel=off` | no swing and no humanising on **this device only**: a straight-grid "before" clip for any feel change. Never use it while several devices play together (that device would be out of time with the others) |
 

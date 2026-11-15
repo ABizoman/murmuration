@@ -102,7 +102,7 @@ test('patches: the synth bass is a saw plus a sine sub an octave down', async (t
   const [a, b] = hits.map((h) => h.args[0]).sort((x, y) => x - y);
   assert.ok(Math.abs(b / a - 2) < 1e-9, 'an octave apart');
   const sub = hits.find((h) => h.node.opts.oscillator.type === 'sine').node;
-  assert.equal(sub.volume.value, -6);
+  assert.equal(sub.volume.value, -2, 'a deep sub');
   assert.equal(hits.find((h) => h.node.opts.oscillator.type === 'sawtooth').node.opts.portamento, 0.02);
 });
 
@@ -293,4 +293,20 @@ test('dance: the default when improvising; minor, 118-124 bpm, house bass, short
   assert.ok(on > 0.95, `on-style ${on}`);
   assert.ok(playing.filter((x) => x.role === 'melody').every((x) => x.part.d.level <= 2), 'the melody stays simple');
   assert.ok(playing.some((x) => x.role === 'bass' && x.part.d.style === 'offbeat'), 'the house bass is used');
+});
+
+test('riffs: a few dozen to choose from, so improvised songs do not all share one melody', () => {
+  const lib = createLibrary();
+  const riffs = lib.loops.filter((l) => l.style === 'riff');
+  assert.ok(riffs.length >= 24, `${riffs.length} riffs`);
+  const shapes = new Set(riffs.map((l) => JSON.stringify(l.events.map((e) => [e.bar, e.step, e.deg]))));
+  assert.equal(shapes.size, riffs.length, 'all different');
+  for (const d of ['sparse', 'medium']) assert.ok(riffs.filter((l) => l.density === d).length >= 5, d);
+  // different seeds end up with different chorus riffs
+  const hooks = new Set();
+  for (const seed of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6']) {
+    const { engine } = simulateBand({ seed, rng: `riff-${seed}`, phrases: 7 });
+    hooks.add(engine.hooks.get('melody')?.loopId);
+  }
+  assert.ok(hooks.size >= 4, `chorus hooks: ${[...hooks].join(', ')}`);
 });
