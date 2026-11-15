@@ -8,6 +8,7 @@ import { Mesh } from '../net/mesh.js';
 import { Gossip } from '../net/gossip.js';
 import { ClockSync } from '../net/clocksync.js';
 import { nextClaim, assignment, rolesFor } from './roles.js';
+import { parseSeed } from '../seed.js';
 
 const PEER_TIMEOUT_MS = 4000;
 
@@ -148,7 +149,7 @@ export class Swarm {
   onHello(from) {
     if (!this.song || !this.playing) return;
     const pos = this.getPosition();
-    const { owners: own } = assignment(this.claims(), this.liveIds());
+    const { owners: own } = assignment(this.claims(), this.liveIds(), this.mode());
     const taken = Object.fromEntries(Object.entries(own).filter(([, c]) => c).map(([r, c]) => [r, c.id]));
     const free = Object.keys(own).filter((r) => !own[r]);
     this.mesh.send(from, { d: 1, body: { type: 'welcome', from: this.id, song: this.song, at: pos, taken, free, ...this.welcomeExtra() } });
@@ -208,7 +209,7 @@ export class Swarm {
 
   join() {
     this.playing = true;
-    const role = nextClaim(this.id, this.claims(), this.preferRole);
+    const role = nextClaim(this.id, this.claims(), this.preferRole, this.mode());
     this.claim = role ? { role, ts: this.clock.now() } : null;
     this.ev.log(role ? `claiming <b>${role}</b>` : 'all roles taken: doubling a part');
     this.recompute();
@@ -241,17 +242,22 @@ export class Swarm {
     return out;
   }
 
+  // Grow mode rides in the song's seed ("#grow"), so every device sharing parts agrees on it.
+  mode() {
+    return { grow: !!parseSeed(this.song?.seed).grow };
+  }
+
   recompute() {
     if (this.playing) {
-      const want = nextClaim(this.id, this.claims(), this.preferRole);
+      const want = nextClaim(this.id, this.claims(), this.preferRole, this.mode());
       if ((want ?? null) !== (this.claim?.role ?? null)) {
-        const lostTo = this.claim && assignment(this.claims(), this.liveIds()).owners[this.claim.role]?.id;
+        const lostTo = this.claim && assignment(this.claims(), this.liveIds(), this.mode()).owners[this.claim.role]?.id;
         this.claim = want ? { role: want, ts: this.clock.now() } : null;
         this.ev.log(lostTo && lostTo !== this.id ? `${lostTo} has the older claim on that part: switching to <b>${want ?? 'doubling'}</b>` : `claiming <b>${want ?? 'doubling'}</b>`);
         this.publishState();
       }
     }
-    const roles = this.playing ? rolesFor(this.id, this.claims(), this.liveIds()) : new Set();
+    const roles = this.playing ? rolesFor(this.id, this.claims(), this.liveIds(), this.mode()) : new Set();
     const key = [...roles].sort().join();
     if (key !== [...this.myRoles].sort().join()) {
       this.myRoles = roles;
@@ -285,7 +291,7 @@ export class Swarm {
   }
 
   view() {
-    const { players } = assignment(this.claims(), this.liveIds());
+    const { players } = assignment(this.claims(), this.liveIds(), this.mode());
     return {
       whyMine: Object.fromEntries(Object.entries(players).flatMap(([r, list]) => list.filter((p) => p.id === this.id).map((p) => [r, p.why]))),
       id: this.id,

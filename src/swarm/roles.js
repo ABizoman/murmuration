@@ -13,6 +13,10 @@ import { ROLES } from '../loops.js';
 
 // Who gets a device first: the core band, then the extra layers (round 2, step 2).
 export const ROLE_PRIORITY = ['chords', 'drums', 'bass', 'melody', 'pad', 'arp', 'perc'];
+// Grow mode (the demo: "#grow" in the seed): nobody covers a part without its own device, so the
+// song takes shape one device at a time, in the order a band builds: the beat, the bass, the chords,
+// the tune, then the layers.
+export const GROW_PRIORITY = ['drums', 'bass', 'chords', 'melody', 'pad', 'arp', 'perc'];
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -46,21 +50,21 @@ export function rendezvous(key, ids) {
 
 // What should `me` claim, given everyone's claims? Returns a role or null (spare).
 // prefer (optional, ?part=<role>): the part this device would like, if nobody owns it yet.
-export function nextClaim(me, claims, prefer = null) {
+export function nextClaim(me, claims, prefer = null, { grow = false } = {}) {
   const own = owners(claims);
   const mine = claims.find((c) => c.id === me);
   if (mine?.role && own[mine.role]?.id === me) return mine.role; // keep it
   if (prefer && ROLES.includes(prefer) && (!own[prefer] || own[prefer].id === me)) return prefer;
-  return ROLE_PRIORITY.find((r) => !own[r] || own[r].id === me) ?? null;
+  return (grow ? GROW_PRIORITY : ROLE_PRIORITY).find((r) => !own[r] || own[r].id === me) ?? null;
 }
 
 // The full picture: who sounds which role. liveIds includes me.
-export function assignment(claims, liveIds) {
+export function assignment(claims, liveIds, { grow = false } = {}) {
   const own = owners(claims);
   const players = Object.fromEntries(ROLES.map((r) => [r, []]));
   for (const r of ROLES) {
     if (own[r]) players[r].push({ id: own[r].id, why: 'owner' });
-    else if (liveIds.length) players[r].push({ id: rendezvous(r, liveIds), why: 'covering' });
+    else if (liveIds.length && !grow) players[r].push({ id: rendezvous(r, liveIds), why: 'covering' });
   }
   const owning = new Set(Object.values(own).filter(Boolean).map((c) => c.id));
   for (const id of liveIds) {
@@ -74,7 +78,7 @@ export function assignment(claims, liveIds) {
   return { owners: own, players };
 }
 
-export function rolesFor(me, claims, liveIds) {
-  const { players } = assignment(claims, liveIds);
+export function rolesFor(me, claims, liveIds, opts = {}) {
+  const { players } = assignment(claims, liveIds, opts);
   return new Set(ROLES.filter((r) => players[r].some((p) => p.id === me)));
 }
