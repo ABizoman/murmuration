@@ -5,6 +5,7 @@ import { KEYS } from './theory.js';
 import { PACK_PROGRESSIONS } from './packs.js';
 import { songFromSeed } from './songs/index.js';
 import { MAX_SWING } from './clock.js';
+import { STYLE_FAMILIES, DEFAULT_FAMILY } from './styles.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -65,5 +66,24 @@ export function structureFromSeed(seed) {
   const pick = list[Math.floor(r() * list.length)];
   // Swing is drawn last on purpose: every seed keeps the key, tempo and progression it had before.
   const swing = clampSwing(Math.round(r() * 60) / 1000); // 0 to 0.06 of a 16th: upbeat pop, not jazz
-  return { seed, key, mode, bpm, progression: pick.chords, swing, mood: pick.mood };
+  const plain = { seed, key, mode, bpm, progression: pick.chords, swing, mood: pick.mood };
+  return withFamily(plain, r, DEFAULT_FAMILY);
+}
+
+// The style family (styles.js) re-draws the mode, tempo, progression and swing from its own ranges.
+// Its draws come after all the old ones, so the key of every seed is unchanged; the tempo and mode
+// of old seeds do change (on purpose: the improvising band now plays upbeat pop).
+function withFamily(plain, r, name) {
+  const fam = STYLE_FAMILIES[name];
+  if (!fam) return plain;
+  const mode = r() < fam.majorChance ? 'major' : 'minor';
+  const bpm = fam.bpm[0] + Math.floor(r() * (fam.bpm[1] - fam.bpm[0] + 1));
+  // The family's own progressions get two thirds of the chance, the mood-tagged pack ones the rest.
+  const own = fam.progressions[mode] || [];
+  const pack = PACK_PROGRESSIONS[mode] || [];
+  const useOwn = own.length && (!pack.length || r() < 2 / 3);
+  const list = useOwn ? own.map((chords) => ({ chords, mood: '' })) : pack;
+  const pick = list[Math.floor(r() * list.length)];
+  const swing = clampSwing(Math.round((fam.swing[0] + r() * (fam.swing[1] - fam.swing[0])) * 1000) / 1000);
+  return { ...plain, mode, bpm, progression: pick.chords, swing, mood: pick.mood || fam.label, family: name };
 }

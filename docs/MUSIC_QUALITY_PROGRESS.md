@@ -385,3 +385,85 @@ mix, feel and scoring are unaffected.
 - [ ] Grooves held for a section: does it feel like a band, or too static?
 - [ ] `?feel=off` vs on: is the humanising audible and better?
 - [ ] `classic.html` loads and plays again.
+
+## Step B (Phase 4) — synth voices, crash and riser, the upbeat-pop family
+
+### Built
+- **B1 patches** (`src/audio.js` `PATCHES`, `patchFor`, `PATCH_ROLE`, `ROLE_PATCH`): one patch per
+  synth voice, built lazily on first use into the role's strip. `drums` (the old synth kit + crash +
+  riser), `bass` (sawtooth with fast filter envelope + sine sub an octave down at −6 dB, portamento
+  0.02), `pad` (fatsawtooth ×3 spread 25 → lowpass 3 kHz → Chorus 2.5 Hz/3.5/0.6, wet 0.4, started;
+  12 voices), `keys` (FM e-piano, harmonicity 3, index 4; 12 voices), `pluck` (fatsquare ×2 →
+  lowpass 4.5 kHz; 6 voices), `lead` (mono fatsawtooth, portamento 0.03, lowpass ~1.8–2.7 kHz,
+  Vibrato 5 Hz whose depth is ramped 0 → 0.08 over 300 ms at every note). A sampled voice that is
+  still loading plays through its role's default patch (drums/bass/pad/lead).
+- `src/voices.js`: `synth: '<patch>'`; new `synth-keys` (chords, family `keys`, so it strums),
+  `synth-pluck` (melody), `melody-epiano` (melody, the e-piano samples under its own id). Synth
+  voices' base `weight` is now 1 (they were 0.3 placeholders); measured `gain`s.
+- `?voice=<role>:<id>[,…]`: `Agent.pinVoice` pins only the instrument.
+- **B2** `crash` (NoiseSynth, decay 1.2 → highpass 5 kHz → hats strip) and `riser` (per note:
+  Noise → bandpass swept 300 Hz → 6 kHz exponentially over the note → gain ramped up, cut at the
+  end, disposed afterwards). Both always synthesised (the kits have no crash), `DRUM_STRIP` routes
+  them to `hats`; `feel.js` gives them no nudge (crash velocity 0.8). The classic grid draws them,
+  and a crash ripples the flock on the iPod screen.
+- **B3** `src/styles.js`: `STYLE_FAMILIES['pop-upbeat']` (the handoff's version), `familyOf`,
+  `familyWeight`. `structureFromSeed()` re-draws mode, tempo, progression and swing from the family
+  after all the old draws (keys unchanged, tempos/modes of old seeds change) and stores
+  `structure.family`. `rules.js` multiplies style and voice weights by the family (songs ignore it).
+- **Instrument stability** (`rules.js` `voiceTurn`): at a section start at most one part may change
+  instrument: among parts that have held theirs ≥ 2 sections, the longest-held (ranked up to 3
+  sections), ties in role order rotated by one place per section. It reads only last phrase's
+  parts, their new `d.voiceSince` (the phrase the instrument started, carried in the gossiped `d`
+  and kept through takeover) and the phrase number, so every device agrees.
+- **Groove stability**: drums and bass keep their style inside a section unless the directive's
+  energy moved > 0.3 from the previous phrase's (`ctx.prevDirective`, new in `buildContext`).
+- `npm run qa` now reports, per seed, the share of on-family styles and instruments, instrument
+  changes at every section start, and which instruments were used.
+- `test/stepB.test.mjs` (14 tests), fake Tone extended (Chorus, Vibrato, FMSynth, Noise, PolySynth
+  with its options, two-argument Filter, start/stop, exponential ramps).
+
+### Judgement calls and deviations
+1. **Synth levels follow `ROLE_GAIN`.** A patch's level is `ROLE_GAIN[role] + PATCH_DB + gain`, so a
+   re-balance moves a whole part. The first, fixed patch levels came out 13–19 dB too quiet
+   (measured: pluck −46, keys −45, pad −43, lead −40 dB vs −28 for the sampled voices); the
+   measured `gain`s fix that.
+2. **"Longest-held goes first" alone stalls.** A part that is offered the turn and keeps its
+   instrument stays longest-held, so it got every turn and the band stopped changing after three
+   section starts. Ranking by held time capped at 3 sections, with ties rotating, keeps the rule
+   and lets the turn move on; and when it is a part's turn, keeping the current instrument has
+   weight ×0.3 (was ×0.5).
+3. The "default instrument" bonus (the alto sax for the melody) no longer applies with a family:
+   the family picks the first instrument.
+4. The family's progressions get **2/3 of the chance as a group**, the mood-tagged pack ones the
+   rest (the handoff's "2:1" read as group weights; per progression the 92 pack ones would swamp
+   the 4–6 family ones).
+5. **`npm run qa` now uses one random stream per seed** (`rng-<seed>`): with one shared stream every
+   seed made the same first choices, so five seeds were not five runs. `docs/qa/A.txt` was
+   re-generated from the step A commit this way so A and B compare fairly.
+6. The crash and riser levels are guesses (`FX_DB`: crash −16, riser −36 → −18 dB, a little under
+   the handoff's numbers because the drums came down 9 dB across steps A and B). Needs ears.
+
+### Measured
+- Tests: **117 passing**.
+- Patch levels, each pinned and soloed: synth-bass −23.2, synth-pad −28.0, synth-keys −27.9,
+  synth-lead −27.8, synth-pluck −28.0 dB (targets −23.3 / −28.1 / −28.1 / −27.8 / −27.8).
+- Balance after re-measuring under the family: drums −24.8, bass −24.5, chords −26.9, melody
+  −25.8 dB (worst 0.2 dB off); `ROLE_GAIN = { drums: -14, bass: 7.5, chords: 10.5, melody: 9 }`.
+  Full band: loudness −21.1 dB, **peak −4.4 dBFS, 0 clips**.
+- `npm run qa` (5 seeds × 40 phrases, A → B): band fit **0.88 → 0.90**; styles on the family list
+  **100%**, instruments **99%** (one seed opened on tenor sax for two sections); **at most 1**
+  instrument change per section start (typically 1 at most starts); instrument changes per role
+  28/18/33/32 → 10/4/10/10; drums fit 0.87 → 0.93; melody fit 0.86 → 0.85 (harmony 0.94 → 0.82,
+  clash 0.84 → 0.90). Weighting POP909 melodies 1 instead of 2 would bring melody harmony back to
+  0.90; kept at 2 because the builtin melody styles are a handful of hand-written lines that would
+  repeat, and the harmony term penalises the passing notes real pop melodies use. Ears decide.
+
+### Not verified / needs ears
+- [ ] Each patch on its own: `?rng=b&solo=chords&voice=chords:synth-pad` (and `synth-keys`;
+      `bass:synth-bass`; `melody:synth-lead`, `melody:synth-pluck`). Too bright, too dull, too thin?
+- [ ] The pad's chorus: does the chords part now sound wide on speakers?
+- [ ] The lead's vibrato fade-in: too much, too little?
+- [ ] Crash and riser levels (they appear once step C places them; until then only songs or tests
+      would play them).
+- [ ] Does the band sound like upbeat pop at 104–124 bpm? Melody: POP909 lines vs the builtin ones.
+- [ ] One instrument change per section: too often or not often enough?

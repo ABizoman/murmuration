@@ -45,6 +45,7 @@ export class Agent {
     this.level = 2;
     this.register = 0;
     this.voice = null; // pinned instrument when auto is off
+    this.pinVoice = null; // an instrument pinned while everything else stays automatic (?voice=)
     this.prevVoicing = null;
   }
 
@@ -68,7 +69,8 @@ export class Agent {
   // ctx: from decide/context.js. advice: Jev's answer for this role and phrase, or null.
   compose(ctx, advice = null) {
     const scores = ruleScores(ctx, this.library);
-    const pins = this.auto ? null : { level: this.level, register: this.register, voice: this.voice };
+    // pinVoice (?voice=<role>:<id>) pins only the instrument and leaves the rest automatic.
+    const pins = this.auto ? (this.pinVoice ? { voice: this.pinVoice } : null) : { level: this.level, register: this.register, voice: this.voice };
     const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, pins, this.random);
     const source = usedJev ? `rules + ${advice.source}` : 'rules';
 
@@ -100,7 +102,10 @@ export class Agent {
 
     const { index, probs } = pickCandidate(cands, { dist, random: this.random });
     const win = cands[index];
-    const d = win.d;
+    // The phrase this instrument started, carried in the shared score so every device can tell
+    // how long each part has held its instrument (rules.js voiceTurn).
+    const kept = ctx.last?.voice === win.d.voice && ctx.last.phrase === ctx.phrase - 1;
+    const d = { ...win.d, voiceSince: kept ? ctx.last.voiceSince ?? ctx.last.phrase : ctx.phrase };
     if (this.auto) {
       this.level = d.level;
       this.register = d.register;

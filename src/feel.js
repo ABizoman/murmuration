@@ -52,6 +52,9 @@ function drumContext(notes, order) {
 }
 
 function drumFeel(n, r, ctx, i) {
+  // The crash and the riser are effects placed by the arrangement: exactly on time, fixed level.
+  if (n.drum === 'crash') return { nudge: 0, vel: 0.8 };
+  if (n.drum === 'riser') return { nudge: 0, vel: n.vel };
   const inBar = n.step % 16;
   const bar = Math.floor(n.step / 16);
   const hat = HATS.has(n.drum);

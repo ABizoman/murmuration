@@ -162,6 +162,7 @@ function onNote(role, n, mine, now) {
       rings.push({ x: cx, y: cy, age: 0, life: 0.8, max: Math.min(W, H) * 0.45 });
       sunKick = 1;
     } else if (n.drum === 'snare') { flock.scatter(0.22 * amp, 110 * S); flock.light(ri, 0.05 * amp, 260, now); }
+    else if (n.drum === 'crash') { flock.scatter(0.4 * amp, 160 * S); flock.light(ri, 0.1 * amp, 900, now); sunKick = 1; } // a section starts
     else flock.light(ri, 0.02 * amp, 160, now);
   } else if (role === 'bass') { bassDrop = Math.min(1, bassDrop + 0.5 * amp); flock.light(ri, 0.04 * amp, 380, now); }
   else if (role === 'chords') { flock.light(ri, 0.12 * amp, 700, now); chordGlow = 1; }

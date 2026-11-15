@@ -1,5 +1,5 @@
-// Audio: sampled instruments (Tone.Sampler) with the old synths as a fallback while samples load
-// or for the "synth" voices. Converts clock time (epoch ms) to the audio clock with
+// Audio: sampled instruments (Tone.Sampler) and synth patches (one per synth voice, see PATCHES),
+// with the role's default patch covering while a voice's samples load. Converts clock time (epoch ms) to the audio clock with
 // getOutputTimestamp(), which pairs "what is coming out of the speaker now" with performance.now().
 //
 // play() is told the step length in ms as well, because a strummed chord carries one time offset
@@ -18,7 +18,7 @@ const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D
 const DRUM_LEN = { kick: 0.6, snare: 0.5, hat: 0.06, ohat: 0.35, tom1: 0.6, tom2: 0.6, tom3: 0.7, crash: 1.2, ride: 0.5 };
 // Measured by soloing each part (?solo=<role>) and reading the loudness meter in "Under the hood".
 // Re-measure after any change to the graph in mix.js; see "How to A/B a change" in the README.
-const ROLE_GAIN = { drums: -11.5, bass: 9, chords: 9, melody: 6.5 };
+const ROLE_GAIN = { drums: -14, bass: 7.5, chords: 10.5, melody: 9 };
 
 // Perceptual loudness: velocity 0.5 should sound about half as loud, which is not half the
 // amplitude. Flat velocities were part of why the band sounded like a machine.
@@ -35,30 +35,134 @@ const sampleOf = (drum) => (drum === 'ohat' || drum === 'hat' ? 'hihat' : drum);
 // Which samples a drum strip loads, derived from the routing in mix.js so the two cannot drift.
 const stripFiles = (strip) => DRUM_FILES.concat('ohat').filter((f) => DRUM_STRIP[f] === strip && DRUM_NOTE[f]);
 
-function makeSynths(strip) {
-  const hatFilter = new Tone.Filter(7000, 'highpass').connect(strip.hats);
-  const drums = {
-    kick: new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.03 }).connect(strip.kick),
-    snare: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.15, sustain: 0 } }).connect(strip.body),
-    hat: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.04, sustain: 0 } }).connect(hatFilter),
-    ohat: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).connect(hatFilter),
+// ---- synth patches (Phase 4) --------------------------------------------------------
+// One patch per synth voice (voices.js `synth: '<patch>'`), built the first time it is played and
+// routed into its role's channel strip. The role's default patch also covers for a sampled voice
+// while its samples are still loading. Level: ROLE_GAIN[role] + PATCH_DB + the voice's `gain`
+// (measured with `npm run measure-levels -- --roles <role> --extra voice=<role>:<id>`), so moving
+// ROLE_GAIN moves a whole part, samples and synths alike. The drum patch keeps its own levels.
+export const PATCH_ROLE = { drums: 'drums', bass: 'bass', pad: 'chords', keys: 'chords', lead: 'melody', pluck: 'melody' };
+export const ROLE_PATCH = { drums: 'drums', bass: 'bass', chords: 'pad', melody: 'lead' }; // fallback while loading
+const PATCH_DB = { bass: -23, pad: -31, keys: -25, lead: -25.5, pluck: -23.5 };
+// The kits have no crash sample: the crash and the riser are always synthesised, into the hats strip.
+export const FX_DB = { crash: -16, riserFrom: -36, riserTo: -18 };
+
+const PATCHES = {
+  drums(strip) {
+    const hatFilter = new Tone.Filter(7000, 'highpass').connect(strip.hats);
+    const d = {
+      kick: new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.03 }).connect(strip.kick),
+      snare: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.15, sustain: 0 } }).connect(strip.body),
+      hat: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.04, sustain: 0 } }).connect(hatFilter),
+      ohat: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).connect(hatFilter),
+      crash: new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 1.2, sustain: 0 } })
+        .connect(new Tone.Filter(5000, 'highpass').connect(strip.hats)),
+    };
+    d.snare.volume.value = -10;
+    d.hat.volume.value = -14;
+    d.ohat.volume.value = -18;
+    d.crash.volume.value = FX_DB.crash;
+    // A riser is one noise burst per note through a bandpass sweeping 300 Hz -> 6 kHz while the level
+    // rises; built per note (one per section at most) and thrown away afterwards.
+    d.riser = (t, dur, v) => {
+      const out = new Tone.Gain(0).connect(strip.hats);
+      const band = new Tone.Filter({ type: 'bandpass', frequency: 300, Q: 1.2 }).connect(out);
+      const noise = new Tone.Noise('white').connect(band);
+      band.frequency.setValueAtTime(300, t);
+      band.frequency.exponentialRampToValueAtTime(6000, t + dur);
+      out.gain.setValueAtTime(dbToGain(FX_DB.riserFrom) * v, t);
+      out.gain.linearRampToValueAtTime(dbToGain(FX_DB.riserTo) * v, t + dur);
+      out.gain.setValueAtTime(0, t + dur);
+      noise.start(t).stop(t + dur + 0.05);
+      const ms = (t + dur - Tone.getContext().rawContext.currentTime) * 1000 + 1000;
+      setTimeout(() => [noise, band, out].forEach((n) => n.dispose()), Math.max(1000, ms));
+    };
+    return {
+      play(n, t, d_, v) {
+        const kind = n.drum === 'hihat' ? 'hat' : n.drum;
+        if (kind === 'riser') return d.riser(t, Math.max(0.1, d_), v);
+        const s = d[kind] || (n.drum?.startsWith('tom') ? d.kick : null);
+        if (!s) return;
+        if (s === d.kick) s.triggerAttackRelease(n.drum?.startsWith('tom') ? 'G2' : 'C1', d_, t, v);
+        else if (s === d.crash) s.triggerAttackRelease(1.2, t, v);
+        else s.triggerAttackRelease(d_, t, v);
+      },
+    };
+  },
+
+  // A sine sub an octave down (-6 dB) under a sawtooth with a fast filter envelope.
+  bass(strip, out) {
+    const env = { attack: 0.005, decay: 0.2, sustain: 0.8, release: 0.12 };
+    const sub = new Tone.MonoSynth({ oscillator: { type: 'sine' }, portamento: 0.02, envelope: env,
+      filterEnvelope: { attack: 0.005, decay: 0.1, sustain: 1, release: 0.12, baseFrequency: 2000, octaves: 0 } }).connect(out);
+    sub.volume.value = -6;
+    const saw = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, portamento: 0.02, envelope: env, filter: { type: 'lowpass', Q: 1 },
+      filterEnvelope: { attack: 0.005, decay: 0.12, sustain: 0.3, release: 0.12, baseFrequency: 400, octaves: 2.5 } }).connect(out);
+    return {
+      play(n, t, d, v, freq) {
+        saw.triggerAttackRelease(freq(n.midi), d, t, v);
+        sub.triggerAttackRelease(freq(n.midi - 12), d, t, v);
+      },
+    };
+  },
+
+  // Fat saw pad -> lowpass 3 kHz -> stereo chorus: where the chords get their width (no widener).
+  pad(strip, out) {
+    const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.6, wet: 0.4 }).connect(out);
+    chorus.start();
+    const filter = new Tone.Filter(3000, 'lowpass').connect(chorus);
+    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 3, spread: 25 },
+      envelope: { attack: 0.08, decay: 0.4, sustain: 0.7, release: 1.2 } }).connect(filter));
+  },
+
+  // A soft FM electric piano. Its voice's family is 'keys', so feel.js strums it.
+  keys(strip, out) {
+    return poly(new Tone.PolySynth(Tone.FMSynth, { maxPolyphony: 12, harmonicity: 3, modulationIndex: 4,
+      oscillator: { type: 'sine' }, modulation: { type: 'sine' },
+      envelope: { attack: 0.005, decay: 1.2, sustain: 0.2, release: 0.8 },
+      modulationEnvelope: { attack: 0.005, decay: 0.6, sustain: 0.1, release: 0.6 } }).connect(out));
+  },
+
+  pluck(strip, out) {
+    const filter = new Tone.Filter(4500, 'lowpass').connect(out);
+    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 6, oscillator: { type: 'fatsquare', count: 2, spread: 12 },
+      envelope: { attack: 0.002, decay: 0.25, sustain: 0, release: 0.2 } }).connect(filter));
+  },
+
+  // A mono lead with portamento, and a vibrato that fades in 300 ms into every note.
+  lead(strip, out) {
+    const vibrato = new Tone.Vibrato({ frequency: 5, depth: 0 }).connect(out);
+    const synth = new Tone.MonoSynth({ oscillator: { type: 'fatsawtooth', count: 2, spread: 12 }, portamento: 0.03,
+      envelope: { attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.25 }, filter: { type: 'lowpass', Q: 0.8 },
+      filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.6, release: 0.25, baseFrequency: 1800, octaves: 0.6 } }).connect(vibrato);
+    return {
+      play(n, t, d, v, freq) {
+        vibrato.depth.cancelScheduledValues(t);
+        vibrato.depth.setValueAtTime(0, t);
+        if (d > 0.3) vibrato.depth.linearRampToValueAtTime(0.08, t + 0.3);
+        synth.triggerAttackRelease(freq(n.midi), d, t, v);
+      },
+    };
+  },
+};
+
+// A polyphonic patch plays chords (one trigger per pitch, strummed by `offsets`) or single notes.
+function poly(synth) {
+  return {
+    play(n, t, d, v, freq, sSec) {
+      if (Array.isArray(n.midis)) {
+        const ts = strumTimes(n, t, sSec);
+        n.midis.forEach((m, k) => synth.triggerAttackRelease(freq(m), d, ts[k], v));
+      } else if (n.midi != null) synth.triggerAttackRelease(freq(n.midi), d, t, v);
+    },
   };
-  drums.snare.volume.value = -10;
-  drums.hat.volume.value = -14;
-  drums.ohat.volume.value = -18;
-  const bass = new Tone.MonoSynth({
-    oscillator: { type: 'sawtooth' },
-    envelope: { attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.2 },
-    filterEnvelope: { attack: 0.01, decay: 0.15, sustain: 0.3, baseFrequency: 80, octaves: 2.5 },
-  }).connect(strip.bass);
-  bass.volume.value = -10;
-  const chords = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.05, decay: 0.3, sustain: 0.5, release: 0.8 } }).connect(strip.chords);
-  chords.volume.value = -15;
-  // The melody's delay now lives in the mix (a send on the melody strip), not on the synth.
-  const melody = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.3 } }).connect(strip.melody);
-  melody.volume.value = -17;
-  return { drums, bass, chords, melody };
 }
+
+// The patch a voice plays through: its own if it is a synth voice, otherwise the role's default.
+export const patchFor = (voiceId, role) => {
+  const p = voiceById[voiceId]?.synth;
+  return typeof p === 'string' && PATCHES[p] ? p : ROLE_PATCH[role];
+};
 
 // master -> glue -> limiter -> destination, then the buses, sends and channel strips.
 // Returns the strip inputs (what instruments connect to) plus the handles the rest of the file
@@ -122,7 +226,15 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
   let isLite = lite == null ? isWeakDevice(globalThis.navigator) : !!lite;
   const mix = mixFor(isLite);
   const { strip, ducks, fx, hallSends, wideners } = buildMix(mix);
-  const synth = makeSynths(strip);
+  // Patches are built the first time something plays through them.
+  const patches = {};
+  function patch(name) {
+    if (patches[name]) return patches[name];
+    const role = PATCH_ROLE[name];
+    const owner = Object.values(VOICES).flat().find((v) => v.synth === name);
+    const out = name === 'drums' ? null : new Tone.Gain(dbToGain((ROLE_GAIN[role] ?? 0) + (PATCH_DB[name] ?? -25) + (owner?.gain ?? 0))).connect(strip[role]);
+    return (patches[name] = PATCHES[name](strip, out));
+  }
   const freq = (m) => Tone.Frequency(m, 'midi').toFrequency();
   const noteName = (m) => Tone.Frequency(m, 'midi').toNote();
 
@@ -252,19 +364,10 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
     for (const id of ids) await ensure(id);
   }
 
-  function playSynth(role, n, t, d, sSec) {
-    const v = gainOf(n.vel);
-    if (role === 'drums') {
-      const kind = n.drum === 'hihat' ? 'hat' : n.drum;
-      const s = synth.drums[kind] || (n.drum?.startsWith('tom') ? synth.drums.kick : null);
-      if (!s) return;
-      if (s === synth.drums.kick) s.triggerAttackRelease(n.drum?.startsWith('tom') ? 'G2' : 'C1', d, t, v);
-      else s.triggerAttackRelease(d, t, v);
-    } else if (role === 'chords') {
-      const ts = strumTimes(n, t, sSec);
-      n.midis.forEach((m, k) => synth.chords.triggerAttackRelease(freq(m), d * 0.95, ts[k], v));
-    } else if (role === 'bass') synth.bass.triggerAttackRelease(freq(n.midi), d * 0.95, t, v);
-    else if (role === 'melody') synth.melody.triggerAttackRelease(freq(n.midi), d * 0.95, t, v);
+  function playSynth(role, n, t, d, sSec, voiceId) {
+    const name = patchFor(voiceId, role);
+    const dur = role === 'drums' ? d : d * 0.95;
+    patch(name).play(n, t, dur, gainOf(n.vel), freq, sSec);
   }
 
   function toAudioTime(epochMs) {
@@ -295,21 +398,21 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
       if (role === 'drums' && n.drum === 'kick') duckAt(t); // whichever kit (or synth) plays it
       const s = samplers.get(voiceId);
       if (!s) {
-        if (voiceId && !voiceById[voiceId]?.synth) ensure(voiceId); // fall back to the synth until it's loaded
-        return playSynth(role, n, t, d, sSec);
+        if (voiceId && !voiceById[voiceId]?.synth) ensure(voiceId); // the role's default patch until it's loaded
+        return playSynth(role, n, t, d, sSec, voiceId);
       }
       try {
         if (role === 'drums') {
           const drum = drumName(n.drum);
           const part = s.parts?.[DRUM_STRIP[drum]];
-          if (!part || !DRUM_NOTE[drum]) return playSynth(role, n, t, d, sSec); // crash/ride: no sample in these kits
+          if (!part || !DRUM_NOTE[drum]) return playSynth(role, n, t, d, sSec, 'synth-drums'); // crash, riser, ride: synthesised
           part.triggerAttackRelease(DRUM_NOTE[drum], DRUM_LEN[n.drum] ?? 0.4, t, gainOf(drum === 'ohat' ? n.vel * 0.8 : n.vel));
         } else if (role === 'chords') {
           const ts = strumTimes(n, t, sSec);
           n.midis.forEach((m, k) => s.triggerAttackRelease(noteName(m), d * 0.98, ts[k], gainOf(n.vel)));
         } else s.triggerAttackRelease(noteName(n.midi), d * 0.98, t, gainOf(n.vel));
       } catch (err) {
-        playSynth(role, n, t, d, sSec);
+        playSynth(role, n, t, d, sSec, role === 'drums' ? 'synth-drums' : null);
       }
     },
   };

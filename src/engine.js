@@ -87,6 +87,7 @@ export class Engine {
       roles: this.roles,
       lookup: (p, r) => this.lookup(p, r),
       directive: this.getDirective(phrase),
+      prevDirective: phrase > 0 ? this.getDirective(phrase - 1) : null,
     });
   }
 

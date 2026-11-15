@@ -35,6 +35,7 @@ Other switches for listening work:
 | `?rng=test1` | fixes every agent's random stream: same seed + same rng = same music |
 | `?solo=bass` | hears one part on its own (`drums`, `bass`, `chords`, `melody`) — how `ROLE_GAIN` is measured |
 | `?lite=1` / `?lite=0` | forces the lite mix on or off instead of deciding from the device |
+| `?voice=chords:synth-pad` | pins one part's instrument (comma-separate several: `?voice=bass:synth-bass,melody:synth-pluck`); everything else stays automatic. With `?solo=` it is how a voice's `gain` is measured |
 | `?feel=off` | no swing and no humanising on **this device only**: a straight-grid "before" clip for any feel change. Never use it while several devices play together (that device would be out of time with the others) |
 
 **A feel A/B in one URL change:** `?rng=test1` then `?rng=test1&feel=off`. The decisions are
@@ -58,6 +59,23 @@ together and check the peak stays under −1 dB and the clip counter stays at 0.
 library, no browser) and prints the fit of every part, how often each part changes loop and
 instrument, and the melody's continuity. `npm run qa -- --save <name>` also writes the report to
 `docs/qa/<name>.txt`, so the numbers can be compared from one change to the next.
+
+## Instruments
+
+`src/voices.js` lists every instrument per part. Sampled ones load from `samples/`; synth ones name a
+patch built in `src/audio.js` (`PATCHES`): **synth bass** (saw + sine sub an octave down),
+**synth pad** (fat saw, lowpass, stereo chorus: the only stereo-wide part), **synth keys** (soft FM
+e-piano, strummed like the piano), **synth lead** (mono, portamento, vibrato that fades in) and
+**synth pluck**. While a sampled voice is loading, the part plays through its role's default patch.
+The kits have no crash sample, so the **crash** and the **riser** (a noise sweep for the bar before
+a big section) are always synthesised into the hats strip.
+
+When improvising, the seed picks a **style family** (`src/styles.js`, today always "upbeat pop"):
+104–124 bpm, mostly major, pop progressions, and soft weights that make pop grooves and pop
+instruments far more likely (anything else is rare, not banned). Instruments only change at the
+start of a 4-phrase section, one part at a time, and each part keeps its instrument for at least
+two sections; the drums and the bass keep their groove for the whole section unless the energy
+jumps. Song mode ignores the family: a song brings its own tempo, chords and instruments.
 
 ## The mix
 

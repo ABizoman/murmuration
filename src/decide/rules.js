@@ -9,8 +9,13 @@
 
 import { DEFAULT_DIRECTIVE } from './directive.js';
 import { VOICES, voiceById, DEFAULT_VOICE } from '../voices.js';
+import { familyOf, familyWeight } from '../styles.js';
 
 export const SECTION_PHRASES = 4;
+export const VOICE_HOLD_SECTIONS = 2; // an instrument is kept at least this many director sections
+const ORDER = ['drums', 'bass', 'chords', 'melody'];
+const GROOVE_ROLES = new Set(['drums', 'bass']); // keep their style for the whole section
+const GROOVE_ENERGY_JUMP = 0.3; // ...unless the energy moves more than this
 
 export const ENTRY = { chords: 0, drums: 1, bass: 1, melody: 2 }; // song phrase each role enters at
 export const REGISTERS = { drums: [0], bass: [0, 1], chords: [-1, 0, 1], melody: [-1, 0, 1] };
@@ -86,10 +91,11 @@ export function ruleScores(ctx, library) {
   }
 
   // ---- 2. Which pattern ---------------------------------------------------------
-  const style = {};
+  const family = familyOf(ctx.structure); // null in song mode
+  let style = {};
   for (const s of library.styles(role)) {
     const e = STYLE_ENERGY[`${role}/${s}`] ?? library.styleEnergy?.(role, s) ?? 0.5;
-    style[s] = (library.styleWeight?.(role, s) ?? 1) * Math.exp(-((e - dir.energy) ** 2) / 0.12);
+    style[s] = (library.styleWeight?.(role, s) ?? 1) * familyWeight(family, 'styles', role, s) * Math.exp(-((e - dir.energy) ** 2) / 0.12);
   }
   if (last?.style && last.style in style) {
     // With many styles to choose from, "keep it" has to win most of the time or the groove
@@ -98,6 +104,15 @@ export function ruleScores(ctx, library) {
     const others = Object.entries(style).filter(([k]) => k !== last.style).reduce((a, [, w]) => a + w, 0);
     const share = held < 3 ? 0.8 : held < 6 ? 0.55 : 0.25;
     style[last.style] = Math.max(style[last.style], (others * share) / (1 - share));
+    // Groove stability (improvising): the drums and the bass keep their style for the whole
+    // section, unless the energy jumps. Only the phrase number and the shared directives decide.
+    if (family && GROOVE_ROLES.has(role) && last.level > 0 && ctx.phrase % SECTION_PHRASES !== 0) {
+      const before = ctx.prevDirective?.energy ?? dir.energy;
+      if (Math.abs(dir.energy - before) <= GROOVE_ENERGY_JUMP) {
+        style = { [last.style]: 1 };
+        reasons.push({ text: 'keeping the groove for the section' });
+      }
+    }
   }
 
   // ---- 3. Which register --------------------------------------------------------
@@ -141,18 +156,22 @@ export function ruleScores(ctx, library) {
   // ---- 5. Which instrument (only at the start of a section) ----------------------
   const voice = {};
   const current = last?.voice && voiceById[last.voice] ? last.voice : null;
-  if (current && ctx.phrase % SECTION_PHRASES !== 0 && (!song?.voices?.[role] || song.voices[role].includes(current))) {
-    voice[current] = 1; // keep it until the next section
+  // Improvising: at a section start, at most one part changes instrument, the one that has held its
+  // instrument longest (and at least VOICE_HOLD_SECTIONS sections). See voiceTurn().
+  const myTurn = !current || song || voiceTurn(ctx) === role;
+  if (current && (ctx.phrase % SECTION_PHRASES !== 0 || !myTurn) && (!song?.voices?.[role] || song.voices[role].includes(current))) {
+    voice[current] = 1; // keep it until the next section (or until it is my turn)
   } else {
     const held = current ? Math.ceil(runLength(history, 'voice') / SECTION_PHRASES) : 0;
     const taken = active.filter((p) => p.voice && voiceById[p.voice]).map((p) => voiceById[p.voice]);
     const options = song?.voices?.[role]?.map((id) => voiceById[id]).filter(Boolean) ?? VOICES[role] ?? [];
     for (const v of options) {
-      let w = (v.weight ?? 1) * Math.exp(-((v.energy - dir.energy) ** 2) / 0.15);
+      let w = (v.weight ?? 1) * familyWeight(family, 'voices', role, v.id) * Math.exp(-((v.energy - dir.energy) ** 2) / 0.15);
       for (const t of taken) if (t.family === v.family) w *= 0.25;
       if (dir.feature === role && v.lead) w *= 1.8;
-      if (v.id === current) w *= held >= 2 ? 0.5 : 2.2;
-      if (!current && v.id === (song?.voices?.[role]?.[0] ?? DEFAULT_VOICE[role])) w *= song ? 3 : 1.5;
+      if (v.id === current) w *= family ? 0.3 : held >= 2 ? 0.5 : 2.2; // improvising: it is my turn to change
+      // the first instrument: the song's own first choice, or the default (the family decides instead)
+      if (!current && !family && v.id === (song?.voices?.[role]?.[0] ?? DEFAULT_VOICE[role])) w *= song ? 3 : 1.5;
       voice[v.id] = w;
     }
     const clash = taken.find((t) => current && voiceById[current]?.family === t.family);
@@ -161,6 +180,29 @@ export function ruleScores(ctx, library) {
   }
 
   return { level, style, register, interaction, voice, reasons };
+}
+
+// Which role may change instrument at this phrase (a section start), or null. Every device must give
+// the same answer, so it reads only what everyone knows: last phrase's part of every role (with its
+// `voiceSince`, the phrase its instrument started) and the phrase number. The part that has held its
+// instrument longest goes first (counted up to 3 sections). Ties go in role order drums, bass, chords, melody, rotated by one
+// place every section, so a part that was offered the turn and kept its instrument does not keep
+// the turn for ever.
+export function voiceTurn(ctx) {
+  if (ctx.phrase % SECTION_PHRASES !== 0) return null;
+  const shift = (ctx.phrase / SECTION_PHRASES) % ORDER.length;
+  const order = [...ORDER.slice(shift), ...ORDER.slice(0, shift)];
+  let best = null, bestHeld = -1;
+  for (const r of order) {
+    const s = r === ctx.role ? ctx.last : ctx.before?.[r];
+    if (!s || s.phrase !== ctx.phrase - 1 || !s.voice) continue;
+    const held = ctx.phrase - (Number.isInteger(s.voiceSince) ? s.voiceSince : 0);
+    if (held < VOICE_HOLD_SECTIONS * SECTION_PHRASES) continue;
+    // Capped, so a part that keeps declining its turn ties with the others and the rotation moves on.
+    const rank = Math.min(held, (VOICE_HOLD_SECTIONS + 1) * SECTION_PHRASES);
+    if (rank > bestHeld) { best = r; bestHeld = rank; }
+  }
+  return best;
 }
 
 // Song mode: nobody tells the parts when to come in. Each part waits until enough of the parts

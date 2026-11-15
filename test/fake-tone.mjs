@@ -18,6 +18,7 @@ class Param {
   linearRampToValueAtTime(v, t) { this.events.push({ op: 'ramp', v, t }); return this; }
   cancelScheduledValues(t) { this.events.push({ op: 'cancel', t }); return this; }
   rampTo(v, s) { this.events.push({ op: 'rampTo', v, s }); this.value = v; return this; }
+  exponentialRampToValueAtTime(v, t) { this.events.push({ op: 'exp', v, t }); return this; }
 }
 
 class Node {
@@ -28,6 +29,8 @@ class Node {
     this.gain = new Param(typeof opts === 'number' ? opts : opts.gain ?? 1);
     this.wet = new Param(opts.wet ?? 1);
     this.volume = new Param(0);
+    this.frequency = new Param(opts?.frequency ?? (typeof opts === 'number' ? opts : 0));
+    this.depth = new Param(opts?.depth ?? 0);
     nodes.push(this);
   }
   connect(dest) { this.outs.push(dest); return this; } // Tone returns the source, not the target
@@ -38,10 +41,12 @@ class Node {
     return this;
   }
   triggerAttackRelease(...args) { triggers.push({ node: this, args }); return this; }
+  start(t) { this.started = t ?? 0; return this; }
+  stop(t) { this.stopped = t ?? 0; return this; }
   dispose() { this.disposed = true; return this; }
   get label() {
     const o = this.opts;
-    if (this.kind === 'Filter') return `Filter(${show(o.frequency ?? o)} ${o.type ?? 'highpass'})`;
+    if (this.kind === 'Filter') return `Filter(${show(o.frequency ?? o)} ${o.type ?? this.type ?? 'highpass'})`;
     if (this.kind === 'Panner') return `Panner(${show(o.pan ?? o)})`;
     if (this.kind === 'Gain') return `Gain(${show(this.gain.value)})`;
     if (this.kind === 'Compressor') return `Compressor(r${o.ratio})`;
@@ -56,6 +61,16 @@ class Node {
 const node = (kind) => class extends Node {
   constructor(opts) { super(kind, opts === undefined ? {} : opts); }
 };
+// new Tone.Filter(freq, type) passes two arguments
+class Filter extends Node {
+  constructor(opts, type) { super('Filter', opts === undefined ? {} : opts); this.type = type; }
+}
+// new Tone.PolySynth(VoiceClass, options)
+class PolySynth extends Node {
+  constructor(voice, opts = {}) { super('PolySynth', opts); this.voice = voice?.kindName ?? 'Synth'; }
+  get label() { return `PolySynth(${this.voice})`; }
+}
+const voiceClass = (kind) => { const C = node(kind); C.kindName = kind; return C; };
 
 class Sampler extends Node {
   constructor(opts) {
@@ -95,10 +110,11 @@ export const makeFakeTone = () => {
       async stop() { return { type: 'audio/webm', size: 1234 }; }
     },
     Sampler,
-    Gain: node('Gain'), Filter: node('Filter'), EQ3: node('EQ3'), Compressor: node('Compressor'),
+    Gain: node('Gain'), Filter, EQ3: node('EQ3'), Compressor: node('Compressor'),
     Limiter: node('Limiter'), Reverb: node('Reverb'), PingPongDelay: node('PingPongDelay'),
     StereoWidener: node('StereoWidener'), Panner: node('Panner'), MembraneSynth: node('MembraneSynth'),
-    NoiseSynth: node('NoiseSynth'), MonoSynth: node('MonoSynth'), PolySynth: node('PolySynth'), Synth: node('Synth'),
+    NoiseSynth: node('NoiseSynth'), MonoSynth: node('MonoSynth'), PolySynth, Synth: voiceClass('Synth'),
+    FMSynth: voiceClass('FMSynth'), Chorus: node('Chorus'), Vibrato: node('Vibrato'), Noise: node('Noise'),
   };
 };
 

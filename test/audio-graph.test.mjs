@@ -108,8 +108,11 @@ test('kits: three samplers per kit, one per route, and every drum sample is stil
   assert.equal(sent('ohat'), sent('hat'), 'the open hat goes with the hats');
   assert.ok(routes(sent('hat')).every((p) => p.includes('Filter(300 highpass)')));
   assert.ok(routes(sent('kick')).every((p) => !p.includes('Filter')));
-  // a drum with no sample in these kits falls back to the synth rather than going silent
-  assert.equal(played(audio, 'drums', note({ drum: 'crash' }), 'kit-acoustic').length, 0, 'no sampler for a crash');
+  // the kits have no crash sample: it is synthesised into the hats strip, whatever kit is playing
+  const crash = played(audio, 'drums', note({ drum: 'crash' }), 'kit-acoustic');
+  assert.equal(crash.length, 1);
+  assert.equal(crash[0].node.kind, 'NoiseSynth');
+  assert.ok(routes(crash[0].node).every((p) => /Filter\(5000 highpass\) -> Filter\(300 highpass\) -> Panner\(0.15\)/.test(p)), routes(crash[0].node).join('\n'));
 });
 
 test('velocity and strum reach the instruments: vel ** 1.6, one trigger per chord pitch', async (t) => {

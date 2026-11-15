@@ -94,8 +94,8 @@ Parts can be 1, 2, 4 or 8 bars. With an 8-chord progression, write 8-bar melody 
 
 ### Instruments (`voices`)
 Any instrument id from `src/voices.js` can be listed for any part, e.g. `strings` for a melody:
-`keys-piano keys-epiano guitar-nylon guitar-steel organ choir strings brass-section synth-pad`,
-`trumpet sax-alto sax-tenor horn-french trombone guitar-clean guitar-jazz guitar-overdrive voice-oohs synth-lead`,
+`keys-piano keys-epiano guitar-nylon guitar-steel organ choir strings brass-section synth-pad synth-keys`,
+`trumpet sax-alto sax-tenor horn-french trombone guitar-clean guitar-jazz guitar-overdrive voice-oohs melody-epiano synth-lead synth-pluck`,
 `bass-electric bass-upright bass-fretless bass-slap bass-tuba synth-bass`,
 `kit-acoustic kit-breakbeat kit-linn kit-cr78 kit-techno kit-8 synth-drums`. The first one listed is preferred.
 

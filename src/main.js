@@ -60,6 +60,12 @@ const libraryFor = (structure) =>
 // does less searching rather than missing the compose deadline.
 const CANDIDATE_COUNT = isWeakDevice(navigator) ? CANDIDATES_LITE : CANDIDATES;
 const agents = ROLES.map((r) => new Agent(r, library, randomFor(RNG, r), { candidates: CANDIDATE_COUNT, feel: FEEL }));
+// ?voice=<role>:<id>[,<role>:<id>]: pin instruments (for measuring a voice's level, or listening to one).
+for (const pair of (params.get('voice') || '').split(',').filter(Boolean)) {
+  const [role, id] = pair.split(':');
+  const agent = agents.find((a) => a.role === role);
+  if (agent && VOICES[role]?.some((v) => v.id === id)) agent.pinVoice = id;
+}
 let realAudio = null;
 let tickTimer = null;
 
@@ -328,7 +334,7 @@ function onRemotePart(body, origin) {
   const d = body.d && typeof body.d === 'object' ? body.d : {};
   engine.setRemotePart(body.phrase, body.role, {
     notes: validNotes(body.notes),
-    d: { level: Number(d.level) || 0, style: String(d.style ?? ''), register: Number(d.register) || 0, interaction: String(d.interaction ?? 'none'), voice: voiceById[d.voice] ? d.voice : null },
+    d: { level: Number(d.level) || 0, style: String(d.style ?? ''), register: Number(d.register) || 0, interaction: String(d.interaction ?? 'none'), voice: voiceById[d.voice] ? d.voice : null, voiceSince: Number.isInteger(d.voiceSince) ? d.voiceSince : null },
     by: origin,
     source: String(body.source ?? ''),
     why: `${String(body.why ?? '').slice(0, 120)} · played by ${origin}`,
@@ -459,7 +465,7 @@ $('mFile').addEventListener('change', async (e) => {
 
 const canvas = $('grid');
 const ctx = canvas.getContext('2d');
-const DRUM_Y = { kick: 0.85, snare: 0.55, hat: 0.25, ohat: 0.25 };
+const DRUM_Y = { kick: 0.85, snare: 0.55, hat: 0.25, ohat: 0.25, crash: 0.08, riser: 0.08 };
 
 function drawPhrase(parts, y0, h, playhead) {
   const W = canvas.width, dpr = devicePixelRatio;

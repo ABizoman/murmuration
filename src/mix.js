@@ -52,6 +52,7 @@ export const DRUM_STRIP = {
   kick: 'kick',
   snare: 'body', clap: 'body', rim: 'body', tom1: 'body', tom2: 'body', tom3: 'body',
   hat: 'hats', hihat: 'hats', ohat: 'hats', ride: 'hats', crash: 'hats',
+  riser: 'hats', // synthesised noise sweep before a big section (audio.js); shares the hats' sends
 };
 
 export const dbToGain = (db) => 10 ** (db / 20);
