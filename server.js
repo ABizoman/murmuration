@@ -23,7 +23,10 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 
 const ADDRESSES = rankAddresses(os.networkInterfaces());
 const LAN_HOST = process.env.HOST || ADDRESSES[0]?.address || 'localhost';
-const LAN_URL = `http://${LAN_HOST}:${PORT}`;
+// PUBLIC_URL=https://xyz.trycloudflare.com puts a tunnel's address in the QR code instead: phones on
+// any network (uni Wi-Fi that keeps devices apart, mobile data) can then join; their music goes
+// through the server when no direct link can be made (mesh.js relay).
+const LAN_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '') || `http://${LAN_HOST}:${PORT}`;
 
 // Tone.js comes from this server (node_modules/tone, installed by npm install), so a phone needs no
 // internet: on a venue Wi-Fi without internet the page used to wait on unpkg and stay dark. If it
@@ -128,7 +131,7 @@ const log = (s) => console.log(`${new Date().toLocaleTimeString()}  ${s}`);
 server.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n  Murmuration signalling server`);
   console.log(`    this computer: http://localhost:${PORT}`);
-  console.log(`    phones:        ${LAN_URL}  (same Wi-Fi)`);
+  console.log(`    phones:        ${LAN_URL}  ${process.env.PUBLIC_URL ? '(public tunnel)' : '(same Wi-Fi)'}`);
   const others = ADDRESSES.filter((a) => a.address !== LAN_HOST);
   if (others.length) console.log(`    if phones can't reach it, try: ${others.map((a) => `http://${a.address}:${PORT} (${a.name})`).join(', ')}  -- or run with HOST=<address>`);
   if (!fs.existsSync(TONE_FILE)) console.log('    note: run npm install so phones get Tone.js from this computer (no internet needed)');
