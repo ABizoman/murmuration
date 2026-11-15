@@ -292,8 +292,9 @@ const chosenSeed = () => {
   const base = song ? songSeed(song) : withStyle($('seed').value.trim() || 'durhack', $('style')?.value);
   return withGrow(withEnd(base, !!$('endAfterPass')?.checked), !!$('grow')?.checked);
 };
-// ?grow=1: the demo mode (each device plays only its own part) ticked from the start.
-if ($('grow') && ['1', 'true', 'yes'].includes(params.get('grow'))) $('grow').checked = true;
+// Grow (each device plays only its own part) is on by default; ?grow=0 starts with it off, so one
+// device plays the whole band (handy for testing alone).
+if ($('grow')) $('grow').checked = !['0', 'false', 'no', 'off'].includes(params.get('grow'));
 for (const id of ['endAfterPass', 'style', 'grow']) {
   $(id)?.addEventListener('change', () => {
     seedEdited = true;
