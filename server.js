@@ -11,7 +11,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
-import { decide, direct, aiStatus } from './ai.js';
+import { decide, direct, instruct, aiStatus } from './ai.js';
 import { rankAddresses } from './src/net/lan.js';
 
 // Keys can live in a .env file next to this script (it is gitignored): GEMINI_API_KEY=..., JEV_API_KEY=...
@@ -58,14 +58,14 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ lanUrl: LAN_URL, ai: aiStatus() }));
   }
-  if (req.method === 'POST' && (url.pathname === '/decide' || url.pathname === '/direct')) {
+  if (req.method === 'POST' && (url.pathname === '/decide' || url.pathname === '/direct' || url.pathname === '/instruct')) {
     try {
       let raw = '';
       for await (const chunk of req) {
         raw += chunk;
         if (raw.length > 200000) throw new Error('request too large');
       }
-      const out = await (url.pathname === '/decide' ? decide : direct)(JSON.parse(raw));
+      const out = await ({ '/decide': decide, '/direct': direct, '/instruct': instruct })[url.pathname](JSON.parse(raw));
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify(out));
     } catch (err) {

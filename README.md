@@ -103,6 +103,25 @@ every device that joins knows: after the outro the band plays one last chord tog
 device leaves the song on its own ("the song ended" in the log). Songs can bring their own form
 (sections, see `docs/ADDING_SONGS.md`); songs without one build themselves up as before.
 
+## Telling the band what to play
+
+The box at the bottom ("Tell your agent what to play") understands, on any device:
+
+- **how busy / how high**: "busier", "calm it down", "take out the drums", "bring the bass back",
+  "go higher", "let it decide" (hands everything back to the agent)
+- **instruments**: "play it on piano", "switch the chords to strings", "make the melody a sax",
+  "drums on house kit", "different instrument"
+- **parts playing off each other**: "melody answer the bass", "have the bass copy the drums",
+  "stop echoing"
+- **the whole song**: "build it up", "bring it down", "spotlight on the melody" (a proposal the
+  swarm votes on, like the director's; lasts 4-8 phrases; not in a written song like Murmur)
+
+It works **across devices**: type "drums on house kit" on a phone and the device playing the drums
+switches (it shows a toast; the log says who asked). Rules first, instantly and offline; anything
+they don't understand ("make it feel like a sunset", "funkier") goes to the AI on the laptop
+(`POST /instruct`: Jev, else Gemini), which answers six multiple-choice questions that become the
+same kind of change (`src/ui/interpret.js`). With no key it says it didn't catch that.
+
 ## Demo checklist
 
 The demo song is **Murmur** (`src/songs/murmur.js`, an original minor-key dance-pop first draft,

@@ -11,6 +11,15 @@ import { DEFAULT_DIRECTIVE, sanitiseDirective, describeDirective } from './direc
 export const SECTION_PHRASES = 4;
 export const sectionOf = (phrase) => Math.floor(phrase / SECTION_PHRASES);
 
+// Which proposal a device endorses for a section: a typed request (the newest) over the LLM's
+// proposals (the earliest). Every device sorts the same set the same way, so the votes converge.
+export const proposalOrder = (a, b) => {
+  const ra = a.source === 'request', rb = b.source === 'request';
+  if (ra !== rb) return ra ? -1 : 1;
+  if (ra) return b.ts - a.ts || (a.pid < b.pid ? -1 : 1);
+  return a.ts - b.ts || (a.pid < b.pid ? -1 : 1);
+};
+
 export class Director {
   // request(state) -> Promise<{ directive, source }>; publish(body) gossips; liveCount() includes me
   constructor({ id, now, publish, liveCount, request, log = () => {}, random = Math.random, onChange = () => {}, maxDelayMs = 1500 }) {
@@ -54,6 +63,25 @@ export class Director {
     }, this.random() * this.maxDelayMs);
   }
 
+  // Someone typed a song-level instruction ("build it up", "spotlight on the bass"): propose it for
+  // the section the next phrase is in. It goes through the same vote as an LLM proposal, but a
+  // request beats an LLM proposal, and a newer request beats an older one (proposalOrder).
+  // It covers that section and the next, so it lasts 4-8 phrases even though the LLM proposes for
+  // every section.
+  propose(phrase, directive, by = this.id) {
+    const clean = sanitiseDirective(directive);
+    if (!clean) return null;
+    const ts = this.now();
+    let first = null;
+    for (const section of [sectionOf(phrase), sectionOf(phrase) + 1]) {
+      const proposal = { type: 'proposal', section, pid: `${by}:${section}:req${Math.round(ts)}`, by, ts, directive: clean, source: 'request' };
+      this.onProposal(proposal);
+      this.publish(proposal);
+      first ||= proposal;
+    }
+    return first;
+  }
+
   onProposal(p) {
     const directive = sanitiseDirective(p.directive);
     if (!directive || !Number.isInteger(p.section) || typeof p.pid !== 'string') return;
@@ -61,8 +89,8 @@ export class Director {
     const known = this.proposals.get(p.section);
     if (known.has(p.pid)) return;
     known.set(p.pid, { section: p.section, pid: p.pid, by: p.by, ts: Number(p.ts) || 0, directive, source: String(p.source || 'llm').slice(0, 20) });
-    // endorse the earliest proposal seen so far
-    const best = [...known.values()].sort((a, b) => a.ts - b.ts || (a.pid < b.pid ? -1 : 1))[0];
+    // endorse the earliest proposal seen so far (typed requests first, the newest of them)
+    const best = [...known.values()].sort(proposalOrder)[0];
     const mine = this.endorsements.get(p.section)?.get(this.id);
     if (mine !== best.pid) {
       this.onEndorse({ section: p.section, pid: best.pid }, this.id);

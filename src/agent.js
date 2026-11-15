@@ -22,7 +22,7 @@ import { decide, candidateDecisions, pickCandidate, jevMultipliers, CONTINUITY_B
 import { applyInteraction } from './decide/transform.js';
 import { fitScore, describeFit } from './decide/fit.js';
 import { humanise } from './feel.js';
-import { voiceById, DEFAULT_VOICE } from './voices.js';
+import { voiceById, DEFAULT_VOICE, VOICES } from './voices.js';
 import { applyTransitions, endNotes } from './transitions.js';
 import { HOOK_ROLES } from './hooks.js';
 
@@ -49,7 +49,8 @@ export class Agent {
     this.level = 2;
     this.register = 0;
     this.voice = null; // pinned instrument when auto is off
-    this.pinVoice = null; // an instrument pinned while everything else stays automatic (?voice=)
+    this.pinVoice = null; // an instrument pinned while everything else stays automatic (?voice=, "on piano")
+    this.pinInteraction = null; // 'echo:<role>' / 'answer:<role>' pinned ("melody answer the bass")
     this.prevVoicing = null;
   }
 
@@ -101,10 +102,18 @@ export class Agent {
     if (hookLoop && !ctx.hook && this.role === 'melody') {
       ctx = { ...ctx, hookRef: renderPhrase(hookLoop, { structure: ctx.structure, phrase: ctx.phrase, register: ctx.hookEntry.register }).notes };
     }
-    const scores = ruleScores(ctx, this.library);
-    // pinVoice (?voice=<role>:<id>) pins only the instrument and leaves the rest automatic.
-    const pins = this.auto ? (this.pinVoice ? { voice: this.pinVoice } : null) : { level: this.level, register: this.register, voice: this.voice };
-    const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, pins, this.random);
+    const scores = { ...ruleScores(ctx, this.library) };
+    // pinVoice (?voice=<role>:<id>, or "play it on piano") pins only the instrument and
+    // pinInteraction ("melody answer the bass") only the echo/answer; the rest stays automatic.
+    const pins = this.auto ? {} : { level: this.level, register: this.register, voice: this.voice };
+    if (this.pinVoice) pins.voice = this.pinVoice;
+    if (this.pinInteraction) pins.interaction = this.pinInteraction;
+    // An asked-for instrument or pairing applies from the next phrase, even mid-section or when the
+    // rules wouldn't offer it (the rules only change instruments at a section start).
+    if (pins.voice && scores.voice && !(pins.voice in scores.voice) && (VOICES[this.role] || []).some((v) => v.id === pins.voice)) scores.voice = { ...scores.voice, [pins.voice]: 1 };
+    const target = pins.interaction?.split(':')[1];
+    if (target && scores.interaction && !(pins.interaction in scores.interaction) && ctx.peers?.[target]?.notes?.length) scores.interaction = { ...scores.interaction, [pins.interaction]: 1 };
+    const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, Object.keys(pins).length ? pins : null, this.random);
     const source = usedJev ? `rules + ${advice.source}` : 'rules';
 
     // The first time a hook is played it will be repeated in every chorus: look twice as hard, and

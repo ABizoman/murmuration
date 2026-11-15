@@ -855,3 +855,22 @@ reverb and delay found no NaN/runaway values, so it was load, not a blown-up fil
   lite mix (no hall); the dance style prefers the sampled electric piano over the FM keys (21% on
   its own). Background: the tick comes from a Web Worker (not throttled) and notes are queued
   300 ms ahead, 1.2 s while the page is hidden.
+
+## The instruction box, extended (all five asked for)
+
+- `src/ui/instructions.js`: commands now carry `pinVoice` (instrument words matched against each
+  part's voice labels), `pinInteraction` ("melody answer the bass" → `answer:bass`), and a `song`
+  change (energy/feature). `sanitiseCommand` (gossip/AI input), `applyChanges`, `describeCommand`.
+- Cross-device: `main.js` `instruct()` applies a command and gossips `{type:'instruct'}`; every
+  device applies it to its own copy of each agent (the owner obeys; a takeover inherits it);
+  receivers log it and toast (`murmuration:instruct` event → `ipod/app.js`).
+- Agent: `pinVoice`/`pinInteraction` pins feed `decide()`; an asked-for instrument or pairing is
+  added to the options if the rules didn't offer it (mid-section instrument changes allowed).
+- Song steering: `director.propose()` — a typed request goes through the swarm vote, beats LLM
+  proposals (newest request wins), covers the current and next director section.
+- AI: `src/ui/interpret.js` builds six choice questions; `POST /instruct` (ai.js) answers with Jev,
+  else Gemini (enum schema), else an error; the answers become a normal command.
+- Verified with two headless Chromes on one server (direct link): B typed "chords on organ" and
+  "chords copy the drums" → A's chords played Organ, echoing the drums, from the next phrase;
+  "build it up" adopted on both devices as a request; typing "melody on trumpet" in A's box set B's
+  melody and toasted on B. Tests **173**.

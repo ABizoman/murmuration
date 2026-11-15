@@ -279,20 +279,27 @@ function skyWrite(text, holdMs, burst = 240) {
 
 // --- Applying a change to this device's agents ---------------------------------------------------
 let lastInstruction = null;
-function apply(text, { write = false, hud = true } = {}) {
+// main.js does the work (rules, then the AI if asked and needed; applies the changes here and sends
+// them to the device playing each part); this draws the result.
+async function apply(text, { write = false, hud = true, ai = false } = {}) {
   const m = mm();
   if (!m) return null;
   const { swarm, engine } = m;
   const mine = [...engine.myRoles];
-  const result = parseInstruction(text, engine.agents, mine);
+  const result = m.instruct ? await m.instruct(text, { ai }) : parseInstruction(text, engine.agents, mine);
   if (result.stop) {
     if (swarm.playing && !$('start').disabled) $('start').click();
     lastInstruction = { text, summary: swarm.playing ? 'left the song' : 'nothing to leave yet' };
     return result;
   }
-  for (const { role, set } of result.changes) Object.assign(engine.agents[role], set);
+  if (!result.understood) {
+    lastInstruction = { text, summary: result.summary };
+    renderStatus();
+    return result;
+  }
   const others = mine.length ? result.changes.map((c) => c.role).filter((r) => !mine.includes(r)) : [];
-  lastInstruction = { text, summary: result.summary, note: others.length ? `${others.map((r) => LABELS[r]).join(' and ')} ${others.length > 1 ? 'are' : 'is'} on another device` : '' };
+  const via = result.source ? ` (understood by ${result.source})` : '';
+  lastInstruction = { text, summary: result.summary + via, note: others.length ? `sent to the device playing ${others.map((r) => LABELS[r].toLowerCase()).join(' and ')}` : result.note || '' };
   if (result.understood && write) skyWrite(text.toLowerCase(), 2600);
   if (result.understood && hud) showHud(text, result);
   renderStatus();
@@ -521,9 +528,21 @@ $('composer').addEventListener('submit', (e) => {
   if (!text) return;
   $('prompt').value = '';
   $('prompt').blur();
-  const result = apply(text, { write: true, hud: false });
-  if (result && !result.understood) showHud('Hmm', result);
-  if (result?.understood && !mm().swarm.playing && !$('start').disabled) $('start').click();
+  // starting the song must happen inside this click, so not after waiting for the AI
+  const quick = parseInstruction(text, mm().engine.agents, [...mm().engine.myRoles]);
+  if (quick.understood && !quick.stop && !mm().swarm.playing && !$('start').disabled) $('start').click();
+  if (!quick.understood && !quick.stop) showHud('Thinking\u2026', { understood: true, summary: 'asking the AI what you mean', changes: [] });
+  apply(text, { write: true, hud: false, ai: true }).then((result) => {
+    if (result && !result.understood) showHud('Hmm', result);
+    else if (result && !quick.understood) showHud(text, result);
+  });
+});
+
+// Another device asked for a change: say what, and light up the parts it touched.
+window.addEventListener('murmuration:instruct', (e) => {
+  const { by, text, summary, mine } = e.detail;
+  toast(`${by}: \u201C${text}\u201D${mine.length ? ` \u2192 ${summary}` : ''}`, mine.length ? 'good' : '');
+  for (const r of e.detail.roles) flock?.light(RI[r], 0.5, 1200, performance.now());
 });
 
 // --- Menu sheet and invite ---------------------------------------------------------------------------

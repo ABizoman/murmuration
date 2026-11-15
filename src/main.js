@@ -20,6 +20,8 @@ import { VOICES, voiceById } from './voices.js';
 import { clipName, describeMeters } from './listen.js';
 import { sanitiseNotes } from './feel.js';
 import { isWeakDevice } from './mix.js';
+import { parseInstruction, sanitiseCommand, applyChanges } from './ui/instructions.js';
+import { buildInstructQuestions, commandFromAnswers } from './ui/interpret.js';
 
 const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
@@ -127,6 +129,7 @@ const swarm = new Swarm({
       if (body.type === 'proposal') director.onProposal(body);
       else if (body.type === 'endorse') director.onEndorse(body, origin);
       else if (body.type === 'hook') onHook(body, origin);
+      else if (body.type === 'instruct') onInstruct(body, origin);
     },
     welcome: (b) => {
       if (b.direction) director.adoptFromPeer(b.direction);
@@ -464,6 +467,54 @@ function onRemotePart(body, origin) {
 }
 
 // A hook another device set: keep it if it is for this song (earliest wins, hooks.js).
+// --- Typed instructions ("Tell your agent what to play") -------------------------------------------
+// The rules first (instant, offline); what they don't understand goes to the AI through the server
+// (Jev, else Gemini: src/ui/interpret.js). The part changes are applied here and gossiped, so the
+// device that plays the part obeys, whoever typed it; a song-level change goes to the director's
+// vote. Returns the command (with .summary) for the screen.
+async function instruct(text, { ai = true } = {}) {
+  const mine = ROLES.filter((r) => engine.myRoles.has(r));
+  let cmd = parseInstruction(text, engine.agents, mine);
+  if (!cmd.understood && !cmd.stop && ai) {
+    try {
+      const { state, questions } = buildInstructQuestions({ text, mine, agents: engine.agents });
+      const res = await fetch('/instruct', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state, questions }), signal: AbortSignal.timeout(9000) });
+      if (res.ok) {
+        const data = await res.json();
+        const c = commandFromAnswers(data.answers, { agents: engine.agents, mine });
+        if (c.understood) cmd = { ...c, source: data.source };
+        log(`instruction “${esc(text)}” → asked ${esc(data.source)}: ${esc(c.summary)}`);
+      } else log(`instruction “${esc(text)}”: the AI could not answer (${res.status})`);
+    } catch (err) {
+      log(`instruction “${esc(text)}”: the AI is unreachable`);
+    }
+  }
+  if (cmd.stop || !cmd.understood) return cmd;
+  applyChanges(cmd.changes, engine.agents);
+  if (cmd.changes.length) swarm.publish({ type: 'instruct', by: swarm.id, text: String(text).slice(0, 120), summary: cmd.summary, changes: cmd.changes });
+  if (cmd.song) {
+    if (songHasForm()) cmd.note = 'This song\u2019s arrangement is written out, so the band-wide change applies when improvising.';
+    else {
+      const pos = engine.position();
+      director.propose(pos ? Math.max(0, pos.phrase) + 1 : 0, { energy: cmd.song.energy, feature: cmd.song.feature, drop: null, pair: null, note: cmd.song.note });
+    }
+  }
+  renderAgents();
+  return cmd;
+}
+
+// Another device's instruction: apply it to my copy of each agent (only the part I play is
+// audible, but a part I take over later already knows what was asked) and tell the screen.
+function onInstruct(body, origin) {
+  const cmd = sanitiseCommand(body);
+  if (!cmd?.changes.length) return;
+  applyChanges(cmd.changes, engine.agents);
+  const mineHit = cmd.changes.map((c) => c.role).filter((r) => engine.myRoles.has(r));
+  log(`<b>${esc(body.by ?? origin)}</b> asked: “${esc(cmd.text)}” → ${esc(cmd.summary)}${mineHit.length ? ` (<b>${mineHit.join(', ')}</b> here)` : ''}`);
+  window.dispatchEvent(new CustomEvent('murmuration:instruct', { detail: { by: body.by ?? origin, text: cmd.text, summary: cmd.summary, roles: cmd.changes.map((c) => c.role), mine: mineHit } }));
+  renderAgents();
+}
+
 function onHook(body, origin) {
   if (!body || body.seed !== formSeed) return;
   hookBook.record({ role: body.role, loopId: body.loopId, register: Number(body.register) || 0, phrase: body.phrase, by: origin ?? body.by });
@@ -660,6 +711,7 @@ requestAnimationFrame(frame);
 // For tests and debugging in the console.
 window.murmuration = {
   swarm, engine, jev, director,
+  instruct, // the "Tell your agent" box: ipod/app.js
   // Read-only hooks for tools/measure-levels.mjs: the master meters and the sample loading state.
   meters: () => (realAudio ? { ...realAudio.meters(), lite: realAudio.isLite() } : null),
   resetMeters: () => realAudio?.resetMeters(),
