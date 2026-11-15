@@ -189,9 +189,15 @@ function onNote(role, n, mine, now) {
 
 // --- Frame ----------------------------------------------------------------------------------------
 let lastT = performance.now();
+let lastDraw = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   if (!flock || !W) return;
+  // The sky costs the laptop's processor time the audio needs: don't draw it while the menu or the
+  // QR code covers it, and draw it at ~30 fps while a song plays.
+  if (sheet.classList.contains('open') || $('invite').open) { lastT = now; return; }
+  if (mm()?.swarm.playing && now - lastDraw < 31) return;
+  lastDraw = now;
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
   tapAudio();
