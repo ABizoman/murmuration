@@ -111,12 +111,16 @@ const PATCHES = {
   },
 
   // Fat saw pad -> lowpass 1.6 kHz (dark and soft) -> stereo chorus: where the chords get their width.
+  // One saw per note (was three detuned): the pad holds long, overlapping chords, so this was a big
+  // share of the CPU; the stereo chorus still gives it its width and movement.
   pad(strip, out) {
     const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.6, wet: 0.4 }).connect(out);
     chorus.start();
     const filter = new Tone.Filter(1600, 'lowpass').connect(chorus);
-    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 3, spread: 25 },
-      envelope: { attack: 0.15, decay: 0.4, sustain: 0.7, release: 1.2 } }).connect(filter));
+    const synth = new Tone.PolySynth(Tone.Synth, { maxPolyphony: 12, oscillator: { type: 'sawtooth' },
+      envelope: { attack: 0.15, decay: 0.4, sustain: 0.7, release: 1.2 } }).connect(filter);
+    synth.volume.value = -5; // one saw is ~5 dB louder than the detuned stack it replaced
+    return poly(synth);
   },
 
   // A soft FM electric piano. Its voice's family is 'keys', so feel.js strums it.
@@ -127,11 +131,14 @@ const PATCHES = {
       modulationEnvelope: { attack: 0.005, decay: 0.6, sustain: 0.1, release: 0.6 } }).connect(out));
   },
 
-  // Triangle waves (soft, few overtones) through a 2.2 kHz lowpass: round, not buzzy.
+  // A triangle wave (soft, few overtones) through a 2.2 kHz lowpass: round, not buzzy. One
+  // oscillator per note (was two detuned): the arp plays 16ths, so voices pile up.
   pluck(strip, out) {
     const filter = new Tone.Filter(2200, 'lowpass').connect(out);
-    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 6, oscillator: { type: 'fattriangle', count: 2, spread: 12 },
-      envelope: { attack: 0.004, decay: 0.3, sustain: 0.08, release: 0.25 } }).connect(filter));
+    const synth = new Tone.PolySynth(Tone.Synth, { maxPolyphony: 6, oscillator: { type: 'triangle' },
+      envelope: { attack: 0.004, decay: 0.3, sustain: 0.08, release: 0.25 } }).connect(filter);
+    synth.volume.value = -5; // one triangle is ~5 dB louder than the two detuned ones it replaced
+    return poly(synth);
   },
 
   // A mono lead with portamento, and a vibrato that fades in 300 ms into every note.
@@ -189,11 +196,22 @@ PATCHES.house = (strip, out, gainDb = 0) => {
   };
 };
 
+// The stab's notes all start together (it plays chords), so one filter with one filter envelope,
+// retriggered per chord, sounds the same as a filter per voice -- at less than half the CPU (a
+// MonoSynth per voice was the most expensive thing in the band: crackles on a laptop playing alone).
 PATCHES.stab = (strip, out) => {
-  const synth = new Tone.PolySynth(Tone.MonoSynth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 3, spread: 30 },
-    envelope: { attack: 0.003, decay: 0.3, sustain: 0.25, release: 0.2 }, filter: { type: 'lowpass', Q: 1 },
-    filterEnvelope: { attack: 0.002, decay: 0.22, sustain: 0.15, release: 0.2, baseFrequency: 300, octaves: 3 } }).connect(out);
-  return poly(synth);
+  const filter = new Tone.Filter({ type: 'lowpass', Q: 1, frequency: 300 }).connect(out);
+  const env = new Tone.FrequencyEnvelope({ attack: 0.002, decay: 0.22, sustain: 0.15, release: 0.2, baseFrequency: 300, octaves: 3 });
+  env.connect(filter.frequency);
+  const synth = new Tone.PolySynth(Tone.Synth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 2, spread: 30 },
+    envelope: { attack: 0.003, decay: 0.3, sustain: 0.25, release: 0.2 } }).connect(filter);
+  const notes = poly(synth);
+  return {
+    play(n, t, d, v, freq, sSec) {
+      env.triggerAttackRelease(d, t);
+      notes.play(n, t, d, v, freq, sSec);
+    },
+  };
 };
 
 PATCHES.riff = (strip, out) => {

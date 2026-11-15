@@ -831,3 +831,20 @@ second pre and the breakdown's last phrase), `nextHook` and `nextPlan`.
   change (the lowpass rests at 20 kHz), so nothing was re-measured.
 - Needs ears: is the sweep's start too dark (raise `SWEEP.from`) or the resonance too much (`q`)?
   Is half a bar of drop right, or should it be a full bar (`DROP_AT` 48)?
+
+## Fix: a laptop playing the whole band alone crackled, then went silent
+
+Measured in headless Chrome (CPU of the audio rendering thread, whole band on one device, full
+mix, `?rng=x1&seed=durhack`, 90 s): **74% mean, 100% peak** in the second chorus. At 100% the audio
+can't be rendered in time: crackles, then a stall on Windows. A probe on every filter, compressor,
+reverb and delay found no NaN/runaway values, so it was load, not a blown-up filter.
+- Offline benchmarks (Tone.Offline, 8 s per patch): the per-voice MonoSynth in the stab (11% of real
+  time), the FM keys (10–14%), the fat-saw pad (7–11%) and the fat-triangle arp (4%) were the cost.
+- Changes: the stab is now plain Synth voices into **one shared filter + filter envelope**,
+  retriggered per chord (its notes always start together, so it sounds the same); the pad is one
+  saw per note (was 3 detuned; the stereo chorus keeps the width), the arp/pluck one triangle (was
+  2); both compensated −5 dB for the louder single oscillator. Result: **52% mean, 73% peak**.
+- Also: bigger audio buffers (`latencyHint: 'playback'`, `?latency=interactive` to A/B), the engine
+  schedules past the output latency, a suspended context is resumed, glitches (where reported)
+  switch to the lite mix.
+- Needs ears: pad and arp a touch less "thick"? Levels compensated by calculation, not measured.

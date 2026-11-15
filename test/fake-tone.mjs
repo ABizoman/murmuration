@@ -118,7 +118,7 @@ export const makeFakeTone = () => {
     Limiter: node('Limiter'), Reverb: node('Reverb'), PingPongDelay: node('PingPongDelay'),
     StereoWidener: node('StereoWidener'), Panner: node('Panner'), MembraneSynth: node('MembraneSynth'),
     NoiseSynth: node('NoiseSynth'), MonoSynth: node('MonoSynth'), PolySynth, Synth: voiceClass('Synth'),
-    FMSynth: voiceClass('FMSynth'), Chorus: node('Chorus'), Vibrato: node('Vibrato'), Noise: node('Noise'),
+    FMSynth: voiceClass('FMSynth'), FrequencyEnvelope: node('FrequencyEnvelope'), Chorus: node('Chorus'), Vibrato: node('Vibrato'), Noise: node('Noise'),
   };
 };
 

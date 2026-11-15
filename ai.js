@@ -92,9 +92,20 @@ async function decideStandIn(state, questions) {
   return { answers, source: 'jev stand-in' };
 }
 
+// A rejected key (expired, revoked: 401/403) won't start working mid-demo: after the first refusal
+// the stand-in answers instead, so the band keeps getting advice and the log stays quiet.
+let jevKeyRejected = false;
 export async function decide({ state, questions }) {
   if (typeof state !== 'string' || !questions || typeof questions !== 'object') throw new Error('bad request');
-  if (process.env.JEV_API_KEY) return decideReal(state.slice(0, 20000), questions);
+  if (process.env.JEV_API_KEY && !jevKeyRejected) {
+    try {
+      return await decideReal(state.slice(0, 20000), questions);
+    } catch (err) {
+      if (!/\b(401|403)\b/.test(String(err.message))) throw err;
+      jevKeyRejected = true;
+      console.log(`  Jev refused the key (${String(err.message).slice(0, 80)}): using the stand-in from now on. Get a new JEV_API_KEY and restart.`);
+    }
+  }
   return decideStandIn(state, questions);
 }
 
