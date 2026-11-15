@@ -18,7 +18,7 @@
 import { DENSITIES } from './loops.js';
 import { renderPhrase } from './render.js';
 import { ruleScores, runLength, SECTION_PHRASES } from './decide/rules.js';
-import { decide, candidateDecisions, pickCandidate, CONTINUITY_BONUS_BY_ROLE, CONTINUITY_HOLD, QUESTIONS } from './decide/select.js';
+import { decide, candidateDecisions, pickCandidate, jevMultipliers, CONTINUITY_BONUS_BY_ROLE, CONTINUITY_HOLD, QUESTIONS } from './decide/select.js';
 import { applyInteraction } from './decide/transform.js';
 import { fitScore, describeFit } from './decide/fit.js';
 import { humanise } from './feel.js';
@@ -85,8 +85,15 @@ export class Agent {
   }
 
   // ctx: from decide/context.js. advice: Jev's answer for this role and phrase, or null.
+  // compose() is prepare() then finish(); the engine may call them apart so that Jev can rank the
+  // candidates in between (Phase 3d). With no ranking the result is exactly compose()'s.
   compose(ctx, advice = null) {
-    if (ctx.directive?.end) return this.endPart(ctx);
+    return this.finish(this.prepare(ctx, advice));
+  }
+
+  // Everything up to and including scoring the candidates. Touches no agent state.
+  prepare(ctx, advice = null) {
+    if (ctx.directive?.end) return { final: this.endPart(ctx), ctx, cands: [] };
     const hookLoop = this.hookLoop(ctx);
     // In a verse, the melody is scored against the hook too (fit.js continuity), so it relates to it.
     if (hookLoop && !ctx.hook && this.role === 'melody') {
@@ -132,8 +139,18 @@ export class Agent {
       c.fit ||= { total: neutral, terms: {} };
       c.bonus = (c.loop && c.loop.id === this.lastLoopId ? bonus : 0) + (c.kind === 'hook' ? HOOK_BONUS : 0);
     }
+    return { ctx, scores, dist, source, cands, choosingHook };
+  }
 
-    const picked = pickCandidate(cands, { dist, random: this.random });
+  // Pick one candidate (with Jev's ranking, { byKey: { candidateKey: p }, source }, if any), then
+  // arrange and humanise it, and update the agent's state.
+  finish(prep, { jev = null } = {}) {
+    if (prep.final) return prep.final;
+    const { ctx, scores, dist, cands, choosingHook } = prep;
+    let { source } = prep;
+    const extra = jevMultipliers(cands, jev?.byKey);
+    if (extra) source += ` · ranked by ${jev.source ?? 'jev'}`;
+    const picked = pickCandidate(cands, { dist, random: this.random, extra });
     // The melody's hook wins outright: the chorus is the chorus.
     const hookIndex = cands.findIndex((c) => c.kind === 'hook' && c.notes.length);
     const best = cands.reduce((b, c, i) => (c.notes.length && (b < 0 || c.fit.total > cands[b].fit.total) ? i : b), -1);
@@ -156,7 +173,9 @@ export class Agent {
     for (const q of QUESTIONS) if (dist[q]) p[q] = dist[q][String(d[q])] ?? 1;
     const reasons = scores.reasons.filter((r) => !r.when || r.when(d)).map((r) => r.text);
     const rank = 1 + cands.filter((c) => c.fit.total > win.fit.total).length;
-    const meta = { d, p, dist, source, reasons, fit: win.fit, candidates: cands.length, rank, chance: probs[index] };
+    // Which other parts this decision heard for the same phrase (not last phrase's): Phase 6.
+    const fresh = Object.entries(ctx.peers || {}).filter(([, x]) => x && x.phrase === ctx.phrase).map(([r]) => r);
+    const meta = { d, p, dist, source, reasons, fit: win.fit, candidates: cands.length, rank, chance: probs[index], fresh };
 
     // The seams between sections (transitions.js): fills, crash, riser, the breakdown's drop.
     const arranged = applyTransitions(win.notes, { role: this.role, dir: ctx.directive, structure: ctx.structure, phrase: ctx.phrase });

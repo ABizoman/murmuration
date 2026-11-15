@@ -180,6 +180,9 @@ const engine = new Engine({
     director.maybePropose(phrase, () => describeForDirector(phrase));
   },
   getAdvice: (phrase, role) => jev.advice(phrase, role),
+  // Phase 3d: the drums, chords and bass prepare their candidates half a bar early and Jev ranks them.
+  onCandidates: (phrase, role, prepared, deadlineMs) => jev.rank(phrase, role, prepared, deadlineMs),
+  getCandidateAdvice: (phrase, role) => jev.ranking(phrase, role),
   // The form leads and the director nudges (form.js); with no form, the director alone.
   getDirective: (phrase) => (form ? formDirective(form, phrase, director.directiveFor(phrase)) : director.directiveFor(phrase)),
   swing: FEEL,
@@ -403,7 +406,7 @@ function renderDirection() {
     (sec ? `<div>song form: <b>${esc(sec)}</b></div>` : '') +
     `<div><b>${esc(describeDirective(d))}</b>${d.note ? ` — “${esc(d.note)}”` : ''}</div>` +
     `<div class="why">${cur ? `section ${cur.section + 1}, proposed by ${esc(cur.by)} (${esc(cur.source)})${cur.votes ? `, ${cur.votes} votes` : ''}` : 'no direction adopted yet: default'} · director here: ${esc(director.status)}</div>` +
-    `<div class="why">Jev: ${esc(j.state)}${j.source ? ` (${esc(j.source)})` : ''} · answered in time ${j.inTime}/${j.asked}${j.late ? `, too late ${j.late}` : ''}${j.failed ? `, failed ${j.failed}` : ''}${j.lastMs != null ? ` · last ${j.lastMs} ms` : ''}</div>`;
+    `<div class="why">Jev: ${esc(j.state)}${j.source ? ` (${esc(j.source)})` : ''} · answered in time ${j.inTime}/${j.asked}${j.ranked ? ` (ranked ${j.ranked} candidate sets)` : ''}${j.late ? `, too late ${j.late}` : ''}${j.failed ? `, failed ${j.failed}` : ''}${j.lastMs != null ? ` · last ${j.lastMs} ms` : ''}</div>`;
 }
 
 function renderAgents() {
@@ -523,7 +526,7 @@ function drawPhrase(parts, y0, h, playhead) {
   if (!parts) {
     ctx.fillStyle = '#8a90a0';
     ctx.font = `${14 * dpr}px system-ui`;
-    ctx.fillText(swarm.playing ? `decided ${engine.composeAheadBars} bar before it starts` : 'press Start or Join', 12 * dpr, y0 + h / 2);
+    ctx.fillText(swarm.playing ? `decided ahead: ${engine.horizonText()}` : 'press Start or Join', 12 * dpr, y0 + h / 2);
     return;
   }
   ROLES.forEach((role, i) => {

@@ -6,10 +6,10 @@
 // If the answer is not back by the deadline, or the relay is unreachable (server killed,
 // airplane mode), advice() returns null and the rules decide alone.
 
-import { describePart } from './context.js';
+import { describePart, summarise } from './context.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './directive.js';
 import { ruleScores } from './rules.js';
-import { QUESTIONS } from './select.js';
+import { QUESTIONS, candidateKey } from './select.js';
 import { voiceById } from '../voices.js';
 
 // Each of an agent's four choices is one Jev "choice" question: the options go in `criteria`
@@ -93,6 +93,25 @@ export function groupAnswers(answers, decode) {
   return out;
 }
 
+// Phase 3d: once the candidates are rendered and scored, Jev picks between the real parts.
+// One choice question, "<role>|candidate", with one criterion per candidate: what it plays (in the
+// same words as describePart) and how well it fits. decode maps Jev's key -> candidateKey.
+export function buildCandidateQuestion(role, cands, phrase = 0) {
+  const criteria = {}, decode = {};
+  cands.forEach((c, i) => {
+    const key = `cand_${i + 1}`;
+    const what = c.notes.length ? describePart(summarise({ notes: c.notes, d: c.d }, role, phrase)) : 'resting for the whole phrase';
+    const fit = c.fit?.total != null ? `; fits the band ${Math.round(c.fit.total * 100)}%` : '';
+    criteria[key] = `Option ${i + 1}: ${what}${fit}${c.kind === 'hook' ? '; this is the hook' : ''}`;
+    decode[key] = candidateKey(c);
+  });
+  return {
+    id: `${role}|candidate`,
+    question: { type: 'choice', instructions: `Which of these parts should the ${role} play in the next phrase? Pick the one that makes the band sound best together.`, criteria },
+    decode,
+  };
+}
+
 export class Jev {
   constructor({ library, url = '/decide', fetchFn = (...a) => fetch(...a), onChange = () => {} }) {
     this.library = library;
@@ -100,6 +119,7 @@ export class Jev {
     this.fetchFn = fetchFn;
     this.onChange = onChange;
     this.answers = new Map(); // phrase -> { role: { answers, source } }
+    this.rankings = new Map(); // "phrase|role" -> { byKey: { candidateKey: p }, source }
     this.stats = { asked: 0, inTime: 0, late: 0, failed: 0, lastMs: null, source: null, state: 'idle' };
     this.pauseUntil = 0;
   }
@@ -123,7 +143,9 @@ export class Jev {
       this.stats.source = data.source;
       if (ms <= deadlineMs) {
         const grouped = groupAnswers(data.answers, decode);
-        this.answers.set(phrase, Object.fromEntries(Object.entries(grouped).map(([role, a]) => [role, { answers: a, source: data.source }])));
+        // Merge: the horizon groups (drums + chords, bass, melody) are planned separately.
+        const had = this.answers.get(phrase) || {};
+        this.answers.set(phrase, { ...had, ...Object.fromEntries(Object.entries(grouped).map(([role, a]) => [role, { answers: a, source: data.source }])) });
         this.stats.inTime++;
         this.stats.state = 'answering';
       } else {
@@ -143,5 +165,47 @@ export class Jev {
 
   advice(phrase, role) {
     return this.answers.get(phrase)?.[role] || null;
+  }
+
+  // Phase 3d: ask Jev to rank the prepared candidates; deadlineMs is when the agent chooses.
+  async rank(phrase, role, prepared, deadlineMs) {
+    if (Date.now() < this.pauseUntil || !prepared?.cands?.length || prepared.cands.length < 2) return;
+    const { id, question, decode } = buildCandidateQuestion(role, prepared.cands, phrase);
+    const body = JSON.stringify({ state: buildState({ [role]: prepared.ctx }), questions: { [id]: question } });
+    const started = Date.now();
+    this.stats.asked++;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), Math.max(200, deadlineMs + 2000));
+    try {
+      const res = await this.fetchFn(this.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, signal: ctl.signal });
+      if (!res.ok) throw new Error(`relay answered ${res.status}`);
+      const data = await res.json();
+      const ms = Date.now() - started;
+      this.stats.lastMs = ms;
+      this.stats.source = data.source;
+      if (ms <= deadlineMs) {
+        const byKey = {};
+        for (const [k, p] of Object.entries(data.answers?.[id] || {})) if (decode[k] && Number.isFinite(p)) byKey[decode[k]] = Math.min(1, Math.max(0, p));
+        this.rankings.set(`${phrase}|${role}`, { byKey, source: data.source });
+        this.stats.inTime++;
+        this.stats.ranked = (this.stats.ranked || 0) + 1;
+        this.stats.state = 'answering';
+      } else {
+        this.stats.late++;
+        this.stats.state = 'too slow';
+      }
+    } catch {
+      this.stats.failed++;
+      this.stats.state = 'unreachable';
+      this.pauseUntil = Date.now() + 8000;
+    } finally {
+      clearTimeout(timer);
+      for (const k of this.rankings.keys()) if (parseInt(k, 10) < phrase - 2) this.rankings.delete(k);
+      this.onChange();
+    }
+  }
+
+  ranking(phrase, role) {
+    return this.rankings.get(`${phrase}|${role}`) || null;
   }
 }

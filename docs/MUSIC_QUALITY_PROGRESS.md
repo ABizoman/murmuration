@@ -551,3 +551,68 @@ mix, feel and scoring are unaffected.
       a full song in ~2 minutes: `/?rng=c`.)
 - [ ] Fills, crash and riser: levels (`FX_DB` in `audio.js`) and whether the riser is too long.
 - [ ] The breakdown's last-bar drop and the final chord.
+
+## Step D (Phase 6) — staggered decisions, and Jev ranks the candidates (3d)
+
+### Built
+- **D1** `src/engine.js`: `COMPOSE_AHEAD = { drums: 2, chords: 2, bass: 1.5, melody: 1 }` bars
+  (constructor option `composeAhead`; the old `composeAheadBars` still sets one horizon for all),
+  `planAhead = compose + 1`. `ensureParts(phrase)` is now `entryFor` + `ensurePart(phrase, role)`
+  per role (still used for the current phrase when joining or after a takeover). `tick()` plans
+  once per **horizon group** (roles with the same horizon: drums + chords, bass, melody; one plan
+  when all horizons are equal) with deadline `untilNext − compose`, and composes each role at its
+  own horizon. Doubling roles copy the owner's part as soon as it is announced. `horizonText()`
+  for the classic grid caption. Parts now carry `fresh` (which peers' same-phrase parts the
+  decision heard).
+- **D2** `Agent.prepare(ctx, advice)` (everything up to and including scoring) and
+  `Agent.finish(prepared, { jev })` (pick, arrange, humanise, update state); `compose()` is
+  `finish(prepare())`. For roles composing ≥ 1.5 bars ahead, when `onCandidates` is given, the engine
+  prepares at compose + 0.5 bar, the app asks Jev to rank (`Jev.rank`: one `"<role>|candidate"`
+  choice question, one criterion per candidate in `describePart` words plus its fit), and the
+  engine finishes at the compose horizon with `select.jevMultipliers` (`max(p, 0.03)`, normalised
+  over the ranked candidates, × K) multiplying the softmax weights (`pickCandidate({ extra })`).
+  If a peer's same-phrase part arrived in between, the engine re-prepares (cheap) and Jev's ranking
+  still applies to candidates with the same `candidateKey`. The melody never asks (1-bar horizon).
+  Jev's stats count the rankings (`ranked`); the director panel shows them.
+- `tools/sim.mjs` `devices: 4` (a device per part, gossip with 60 ms latency), `ensembleStats`
+  (each part re-scored against what the others actually played that phrase) and `freshStats`.
+  `npm run qa` defaults to four devices; `--devices 1` and `--horizons uniform` for comparisons.
+- `test/stepD.test.mjs` (8 tests).
+
+### Judgement calls and deviations
+1. **The QA had to change to see Phase 6 at all.** With one engine playing every part, the parts
+   already composed in order in the same tick and later ones heard earlier ones; staggering helps
+   when the parts are on *different* devices. And "fit at decision time" gets stricter as the
+   context gets fresher (fresh peers weigh 1, stale 0.5), so it cannot compare set-ups; the
+   after-the-fact ensemble score can.
+2. Plans are grouped **by horizon value** rather than a fixed list, so equal horizons still give one
+   plan per phrase (the old behaviour and its test).
+3. The ranking is **only used when the app provides `onCandidates`** (main.js does). Tests and the
+   QA, without it, run `compose()` at the horizon as before, so `?rng=` runs are unchanged by 3d's
+   timing.
+4. Jev's ranking can swing close calls only: like `blend()`, it multiplies the softmax weights, and
+   λ = 6 at temperature 0.35 makes a large fit gap worth far more than the ranking. That is
+   deliberate (Jev can't pick something sour); a test checks it moves the runner-up a lot.
+
+### Measured
+- Tests: **136 passing**.
+- `npm run qa`, four devices (`docs/qa/D-uniform-horizons.txt` vs `docs/qa/D.txt`):
+
+| | uniform 1-bar horizons | staggered |
+|---|---|---|
+| bass heard drums / chords (same phrase) | 0% / 0% | **98% / 98%** |
+| melody heard drums / bass / chords | 0% / 0% / 0% | **98% / 98% / 98%** |
+| ensemble band fit | 0.88 | **0.91** |
+| melody clash (ensemble) | 0.74 | **0.86** |
+| chords clash (ensemble) | 0.77 | **0.94** |
+| bass rhythm (locks with the kick) | 0.85 | **0.90** |
+
+  Form checks unchanged: sections in order, hook 100%, fills/crashes/risers all in place.
+  (The 2% is phrase 0, composed when the song starts.)
+- Headless Chrome, `classic.html?rng=d`, 45 s: Jev asked 30, all in time (stand-in, ~250 ms),
+  15 candidate sets ranked, parts show "ranked by jev stand-in", no page errors.
+
+### Not verified / needs ears
+- [ ] With a phone per part: do the parts sound more "together"? Especially the melody against the
+      chords (the clash numbers above suggest the sourness should be less across devices).
+- [ ] The drums and chords now decide 2 bars ahead: a director change lands 1 bar later for them.

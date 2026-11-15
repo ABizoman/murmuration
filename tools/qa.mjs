@@ -7,10 +7,12 @@
 //   npm run qa -- --save A          also write it to docs/qa/A.txt, to compare across steps
 //   npm run qa -- --seeds a,b,c     other seeds
 //   npm run qa -- --phrases 60
+//   npm run qa -- --devices 1        one engine plays everything (default: four devices)
+//   npm run qa -- --horizons uniform every part decides 1 bar ahead, as before Phase 6
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { ROLES } from '../src/loops.js';
-import { simulateBand, byRole, changes, loopOf, voiceOf, fitStats } from './sim.mjs';
+import { simulateBand, byRole, changes, loopOf, voiceOf, fitStats, ensembleStats, freshStats } from './sim.mjs';
 import { STYLE_FAMILIES } from '../src/styles.js';
 import { SECTION_PHRASES } from '../src/decide/rules.js';
 import { transitionsIn } from '../src/transitions.js';
@@ -25,6 +27,10 @@ const SEEDS = opt('seeds', 'durhack,pop1,pop2,pop3,pop4').split(',');
 const PHRASES = Number(opt('phrases', 40));
 const RNG = opt('rng', 'qa');
 const SAVE = opt('save', null);
+// --devices 4 (default): a device per part, gossiping with 60 ms latency, like the demo. --devices 1:
+// one engine plays everything. --horizons uniform: every part decides 1 bar ahead (before Phase 6).
+const DEVICES = Number(opt('devices', 4));
+const UNIFORM = opt('horizons', 'staggered') === 'uniform';
 
 const lines = [];
 const out = (s = '') => lines.push(s);
@@ -34,17 +40,19 @@ const pct = (x) => `${Math.round(x * 100)}%`;
 const lpad = (s, n) => String(s).padStart(n);
 
 out(`Murmuration music QA · ${PHRASES} phrases · rng "${RNG}-<seed>" · seeds ${SEEDS.join(', ')}`);
+out(`${DEVICES === 4 ? 'four devices, one part each (60 ms gossip)' : 'one device plays everything'} · horizons ${UNIFORM ? 'uniform (1 bar)' : 'staggered (drums + chords 2, bass 1.5, melody 1 bars)'}`);
 out(`(loop/voice changes count only consecutive phrases where the part plays in both)`);
 
 const pooled = Object.fromEntries(ROLES.map((r) => [r, { fit: [], loop: [0, 0], voice: [0, 0], terms: {} }]));
 let melodyCont = [];
+const ensPooled = Object.fromEntries(ROLES.map((r) => [r, { total: [], terms: {}, fresh: {} }]));
 const formPooled = { hook: [0, 0], chorusCont: [], fills: [0, 0], crashes: [0, 0], risers: [0, 0], order: true, bad: [] };
 const famPooled = { style: [0, 0], voice: [0, 0], worstBoundary: 0, offStyles: {}, offVoices: {} };
 
 for (const seed of SEEDS) {
   const t0 = performance.now();
   // One random stream per seed (like ?rng=<rng>-<seed>), so the seeds are independent runs.
-  const { structure, parts, form, directive } = simulateBand({ seed, rng: `${RNG}-${seed}`, phrases: PHRASES });
+  const { structure, parts, form, directive } = simulateBand({ seed, rng: `${RNG}-${seed}`, phrases: PHRASES, devices: DEVICES, engineOptions: UNIFORM ? { composeAheadBars: 1 } : {} });
   const ms = performance.now() - t0;
   const series = byRole(parts);
   out();
@@ -63,6 +71,14 @@ for (const seed of SEEDS) {
     if (r === 'melody' && fit.terms.continuity != null) melodyCont.push(fit.terms.continuity);
     const terms = Object.entries(fit.terms).map(([k, v]) => `${k} ${f2(v)}`).join(', ');
     out(`${pad(r, 8)}${lpad(f2(fit.total), 6)}  ${pad(`${lc.changed}/${lc.pairs}`, 14)}${pad(`${vc.changed}/${vc.pairs}`, 15)}${terms}`);
+  }
+  // After the fact: each part against what the others really played, and what each decision heard.
+  const ens = ensembleStats(series, { structure, directive });
+  const fr = freshStats(series);
+  for (const r of ROLES) {
+    if (ens[r].total != null) ensPooled[r].total.push(ens[r].total);
+    for (const [k, v] of Object.entries(ens[r].terms)) (ensPooled[r].terms[k] ||= []).push(v);
+    for (const [k, v] of Object.entries(fr[r])) if (v != null) (ensPooled[r].fresh[k] ||= []).push(v);
   }
   // The form: sections in order, the hook in every chorus, transitions at the seams.
   if (form) {
@@ -142,6 +158,14 @@ for (const r of ROLES) {
   out(`${pad(r, 8)}${lpad(f2(avg(P.fit)), 6)}  ${pad(`${P.loop[0]}/${P.loop[1]}`, 14)}${pad(`${P.voice[0]}/${P.voice[1]}`, 15)}${terms}`);
 }
 out(`band fit ${f2(avg(ROLES.flatMap((r) => pooled[r].fit)))} · melody continuity ${f2(avg(melodyCont))}`);
+out('ensemble (each part scored afterwards against what the others actually played that phrase):');
+for (const r of ROLES) {
+  const E = ensPooled[r];
+  const terms = Object.entries(E.terms).map(([k, v]) => `${k} ${f2(avg(v))}`).join(', ');
+  const fresh = Object.entries(E.fresh).map(([k, v]) => `${k} ${pct(avg(v))}`).join(', ');
+  out(`  ${pad(r, 8)}${lpad(f2(avg(E.total)), 6)}  ${terms} · heard same-phrase: ${fresh}`);
+}
+out(`  band ${f2(avg(ROLES.flatMap((r) => ensPooled[r].total)))}`);
 if (formPooled.hook[1] || formPooled.fills[1]) {
   const c = formPooled.chorusCont;
   out(`form: sections in order ${formPooled.order ? 'yes' : 'NO'} · hook in later chorus phrases ${pct(formPooled.hook[0] / (formPooled.hook[1] || 1))} · chorus melody continuity ${f2(c.length ? c.reduce((a, b) => a + b, 0) / c.length : null)} · fills ${formPooled.fills[0]}/${formPooled.fills[1]} · crashes ${formPooled.crashes[0]}/${formPooled.crashes[1]} · risers ${formPooled.risers[0]}/${formPooled.risers[1]}`);

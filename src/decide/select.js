@@ -102,10 +102,11 @@ export function candidatePrior(d, dist) {
 
 // logit = log(prior) + lambda * fit (+ a bonus), then softmax at a low temperature.
 // candidates: [{ d, fit: { total }, bonus? }]. Returns the index chosen and the probabilities.
-export function pickCandidate(candidates, { dist, random = Math.random, lambda = LAMBDA, temperature = TEMPERATURE } = {}) {
+// `extra` (optional, one number per candidate) multiplies the softmax weights: Jev's ranking (3d).
+export function pickCandidate(candidates, { dist, random = Math.random, lambda = LAMBDA, temperature = TEMPERATURE, extra = null } = {}) {
   const logits = candidates.map((c) => Math.log(candidatePrior(c.d, dist)) + lambda * (c.fit?.total ?? 0.5) + (c.bonus || 0));
   const top = Math.max(...logits);
-  const weights = logits.map((l) => Math.exp((l - top) / temperature));
+  const weights = logits.map((l, i) => Math.exp((l - top) / temperature) * (extra?.[i] ?? 1));
   const total = weights.reduce((a, b) => a + b, 0);
   const probs = weights.map((w) => w / total);
   let r = random();
@@ -132,4 +133,20 @@ export function decide(scores, advice, pins, random) {
     p[q] = dist[q][choice] ?? 1;
   }
   return { d, p, dist, usedJev };
+}
+
+// A candidate's identity: the loop it renders and the decision. Used to match Jev's ranking (3d) to
+// candidates that were prepared again after a peer's part arrived.
+export const candidateKey = (c) => `${c.loop?.id ?? 'rest'}|${c.d.level}|${c.d.register}|${c.d.interaction}`;
+
+// Jev's probabilities over candidates -> one weight multiplier each: max(p, floor) x K, normalised
+// over the candidates Jev ranked (the same floor and normalisation idea as blend()). Candidates Jev
+// never saw get 1 (no opinion).
+export function jevMultipliers(cands, byKey) {
+  if (!byKey) return null;
+  const keys = cands.map(candidateKey);
+  const seen = keys.filter((k) => Number.isFinite(byKey[k]));
+  if (seen.length < 2) return null;
+  const total = seen.reduce((a, k) => a + Math.max(byKey[k], JEV_FLOOR), 0);
+  return keys.map((k) => (Number.isFinite(byKey[k]) ? (Math.max(byKey[k], JEV_FLOOR) / total) * seen.length : 1));
 }
