@@ -237,6 +237,9 @@ export class Engine {
       }
     }
 
+    // Notes reach Web Audio at least audioAheadMs before they sound, and 100 ms more than the
+    // device's output latency (bigger audio buffers mean a later speaker; see audio.js).
+    const ahead = Math.max(this.audioAheadMs, (this.audio.latencyMs?.() || 0) + 100);
     for (const p of [cur, next]) {
       const entry = this.phrases.get(p);
       if (!entry) continue;
@@ -248,7 +251,7 @@ export class Engine {
           const key = `${role}:${i}`;
           if (entry.sent.has(key)) return;
           const when = t0 + (n.step + (this.swing ? swingOffset(n.step, this.structure.swing) : 0) + (n.nudge || 0)) * sMs;
-          if (when > now + this.audioAheadMs) return;
+          if (when > now + ahead) return;
           entry.sent.add(key);
           if (when < now - 20) return; // too late (joined mid-phrase, or tab throttled): skip
           this.audio.play(role, n, when, n.dur * sMs, part.d?.voice, sMs);

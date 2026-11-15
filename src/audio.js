@@ -294,9 +294,32 @@ function buildMix(mix) {
   return { strip, buses, ducks, fx, hallSends, wideners, sweeps };
 }
 
-export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
+// Bigger audio buffers. With the default 'interactive' latency Chrome on Windows renders in ~10 ms
+// chunks; when the graph is busy (seven parts, two reverbs) a chunk comes late and the speaker
+// crackles like a bad radio, or drops out. 'playback' asks for bigger chunks. That adds output
+// latency, but every note is placed with getOutputTimestamp() (toAudioTime below), so devices stay
+// in time with each other, and the engine schedules further ahead to match (latencyMs()).
+// ?latency=interactive restores the old behaviour for A/B.
+let contextMade = false;
+function useContext(latencyHint) {
+  if (contextMade || !Tone.Context || !Tone.setContext) return;
+  contextMade = true;
+  try {
+    Tone.setContext(new Tone.Context({ latencyHint }));
+  } catch (err) {
+    console.warn('could not create the audio context with', latencyHint, err);
+  }
+}
+
+export async function createAudio({ onStatus = () => {}, lite = null, latencyHint = 'playback' } = {}) {
+  useContext(latencyHint); // before anything is built on the context
   await Tone.start(); // must run inside a user gesture
   const raw = Tone.getContext().rawContext;
+  // If the system takes the audio away (another app, a speaker reconnecting, a phone call) the
+  // context is suspended and the music would stay cut off: ask for it back.
+  raw.addEventListener?.('statechange', () => {
+    if (raw.state === 'suspended' || raw.state === 'interrupted') raw.resume?.().catch(() => {});
+  });
 
   let isLite = lite == null ? isWeakDevice(globalThis.navigator) : !!lite;
   const mix = mixFor(isLite);
@@ -481,6 +504,15 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
     meters: () => meters,
     resetMeters: () => { meters = newMeters(); },
     isLite: () => isLite,
+    // How far behind the speaker is (ms): the engine hands notes over at least this much earlier.
+    latencyMs: () => 1000 * ((raw.outputLatency || 0) || (raw.baseLatency || 0)),
+    // Times the browser could not render audio in time (each one is a click or a dropout), where the
+    // browser reports it (Chrome's playbackStats); null elsewhere.
+    glitches: () => {
+      const st = raw.playbackStats;
+      const n = st?.underrunEvents ?? st?.fallbackFramesEvents;
+      return Number.isFinite(n) ? n : null;
+    },
     setLite,
     // 'normal' or 'dance' (mix.js PUMP): how hard every kick ducks the bass and the chords.
     setPump: (name) => { pump = PUMP[name] || PUMP.normal; },

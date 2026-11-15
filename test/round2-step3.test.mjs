@@ -139,3 +139,48 @@ test('the improvising band and Murmur both build up: drops, sweeps and walks in 
     }
   }
 });
+
+test('audio: bigger buffers (no crackles), the engine schedules past the latency, glitches are counted', async (t) => {
+  globalThis.window = { Tone: makeFakeTone() };
+  const Tone = window.Tone;
+  const { createAudio } = await import(`../src/audio.js?${Math.random()}`);
+  const audio = await createAudio({ onStatus: () => {}, lite: false });
+  t.after(() => audio.dispose());
+  assert.equal(Tone.getContext().rawContext.latencyHint, 'playback');
+  assert.equal(audio.glitches(), null, 'no playbackStats: nothing to report');
+  Tone.getContext().rawContext.outputLatency = 0.12;
+  assert.equal(Math.round(audio.latencyMs()), 120);
+  Tone.getContext().rawContext.playbackStats = { underrunEvents: 3 };
+  assert.equal(audio.glitches(), 3);
+  // the engine hands notes over latency + 100 ms early (not just its usual 150 ms)
+  const { Engine } = await import('../src/engine.js');
+  const handOver = (latencyMs, nowMs) => {
+    const sent = [];
+    const e = new Engine({ agents: [], audio: { play: (role, n, when) => sent.push(when), latencyMs: () => latencyMs }, now: () => nowMs, getDirective: () => null });
+    e.start({ bpm: 120 }, 0);
+    e.myRoles.add('chords');
+    e.ensureParts = () => {}; // only the hand-over is under test
+    e.phrases.set(0, { phrase: 0, local: { chords: { notes: [{ step: 4, dur: 2, vel: 0.5, midis: [60] }], d: {} } }, sent: new Set() });
+    e.tick();
+    return sent;
+  };
+  // step 4 at 120 bpm sounds at 500 ms; at 250 ms it is 250 ms away
+  assert.deepEqual(handOver(0, 250), [], 'no latency: handed over 150 ms before');
+  assert.deepEqual(handOver(200, 250), [500], 'a 200 ms speaker: handed over 300 ms before');
+});
+
+test('server: the QR code points at the Wi-Fi address, not a virtual adapter', async () => {
+  const { rankAddresses } = await import('../src/net/lan.js');
+  const ifaces = {
+    'vEthernet (WSL)': [{ family: 'IPv4', address: '172.22.48.1', internal: false }],
+    'Loopback Pseudo-Interface 1': [{ family: 'IPv4', address: '127.0.0.1', internal: true }],
+    'Ethernet 2': [{ family: 'IPv4', address: '169.254.10.3', internal: false }],
+    'VirtualBox Host-Only Network': [{ family: 'IPv4', address: '192.168.56.1', internal: false }],
+    'Wi-Fi': [{ family: 'IPv6', address: 'fe80::1', internal: false }, { family: 'IPv4', address: '10.240.3.17', internal: false }],
+  };
+  const ranked = rankAddresses(ifaces);
+  assert.equal(ranked[0].address, '10.240.3.17');
+  assert.ok(!ranked.some((a) => a.address === '127.0.0.1' || a.address.includes(':')));
+  assert.equal(ranked[ranked.length - 1].address, '169.254.10.3');
+  assert.equal(rankAddresses({ en0: [{ family: 4, address: '192.168.1.20', internal: false }] })[0].address, '192.168.1.20', 'macOS, older Node');
+});

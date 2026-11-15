@@ -86,11 +86,15 @@ export const makeFakeTone = () => {
   triggers.length = 0;
   DEST.outs.length = 0;
   Sampler.failUrls = null;
+  const raw0 = { currentTime: 0, getOutputTimestamp: () => ({ contextTime: 10, performanceTime: performance.now() }) };
+  let current = { rawContext: raw0 };
   // Tone.getDestination() is where the meters and the recorder tap; DEST is the speaker itself.
   const destination = new Node('destination-tap');
   return {
     start: async () => {},
-    getContext: () => ({ rawContext: { currentTime: 0, getOutputTimestamp: () => ({ contextTime: 10, performanceTime: performance.now() }) } }),
+    getContext: () => current,
+    setContext: (c) => { current = c; },
+    Context: class { constructor(o = {}) { this.opts = o; this.rawContext = { ...raw0, latencyHint: o.latencyHint }; } },
     getDestination: () => destination,
     gainToDb: (g) => 20 * Math.log10(g || 1e-9),
     dbToGain: (db) => 10 ** (db / 20),

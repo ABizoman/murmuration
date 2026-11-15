@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { decide, direct, aiStatus } from './ai.js';
+import { rankAddresses } from './src/net/lan.js';
 
 // Keys can live in a .env file next to this script (it is gitignored): GEMINI_API_KEY=..., JEV_API_KEY=...
 try { process.loadEnvFile?.(path.join(path.dirname(fileURLToPath(import.meta.url)), '.env')); } catch {}
@@ -19,18 +20,31 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8000);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.mid': 'audio/midi', '.mp3': 'audio/mpeg' };
 
-function lanAddress() {
-  for (const list of Object.values(os.networkInterfaces()))
-    for (const a of list || []) if (a.family === 'IPv4' && !a.internal) return a.address;
-  return 'localhost';
-}
-const LAN_URL = `http://${lanAddress()}:${PORT}`;
+const ADDRESSES = rankAddresses(os.networkInterfaces());
+const LAN_HOST = process.env.HOST || ADDRESSES[0]?.address || 'localhost';
+const LAN_URL = `http://${LAN_HOST}:${PORT}`;
+
+// Tone.js comes from this server (node_modules/tone, installed by npm install), so a phone needs no
+// internet: on a venue Wi-Fi without internet the page used to wait on unpkg and stay dark. If it
+// isn't installed, the browser is sent to unpkg as before.
+const TONE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_modules', 'tone', 'build', 'Tone.js');
+const TONE_CDN = 'https://unpkg.com/tone@15.1.22/build/Tone.js';
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/qr.svg') {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(await QRCode.toString(LAN_URL, { type: 'svg', margin: 1, color: { dark: '#e6e8ee', light: '#0000' } }));
+  }
+  if (url.pathname === '/vendor/Tone.js') {
+    return fs.readFile(TONE_FILE, (err, data) => {
+      if (err) {
+        res.writeHead(302, { location: TONE_CDN });
+        return res.end();
+      }
+      res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'public, max-age=86400' });
+      res.end(data);
+    });
   }
   if (url.pathname === '/songs-local.json') {
     // Your own songs: every .js file in songs-local/ (gitignored). See docs/ADDING_SONGS.md.
@@ -110,7 +124,11 @@ const log = (s) => console.log(`${new Date().toLocaleTimeString()}  ${s}`);
 server.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n  Murmuration signalling server`);
   console.log(`    this computer: http://localhost:${PORT}`);
-  console.log(`    phones:        ${LAN_URL}  (same Wi-Fi)\n`);
+  console.log(`    phones:        ${LAN_URL}  (same Wi-Fi)`);
+  const others = ADDRESSES.filter((a) => a.address !== LAN_HOST);
+  if (others.length) console.log(`    if phones can't reach it, try: ${others.map((a) => `http://${a.address}:${PORT} (${a.name})`).join(', ')}  -- or run with HOST=<address>`);
+  if (!fs.existsSync(TONE_FILE)) console.log('    note: run npm install so phones get Tone.js from this computer (no internet needed)');
+  console.log('');
   try { console.log(await QRCode.toString(LAN_URL, { type: 'terminal', small: true })); } catch {}
   const ai = aiStatus();
   console.log(`  Jev: ${ai.jev === 'jev' ? 'live (JEV_API_KEY)' : 'stand-in (set JEV_API_KEY for the real model)'}`);

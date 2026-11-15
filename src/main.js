@@ -46,6 +46,8 @@ const PART = ROLES.includes(params.get('part')) ? params.get('part') : DEMO ? 'd
 // ?feel=off: no swing and no humanising on this device, for a straight-grid "before" clip.
 // Local to the URL that sets it: never use it while several devices play together.
 const FEEL = params.get('feel') !== 'off';
+// Audio buffer size (audio.js): 'playback' (big, no crackles) unless ?latency=interactive.
+const LATENCY = ['interactive', 'balanced', 'playback'].includes(params.get('latency')) ? params.get('latency') : 'playback';
 
 // Songs in songs-local/ (gitignored) are loaded before anything starts, so every device that
 // joins a "song:<id>" seed knows the song.
@@ -181,6 +183,7 @@ const engine = new Engine({
   audio: {
     play: (role, n, when, dur, voice, sMs) =>
       (SOLO && role !== SOLO ? null : realAudio?.play(role, n, when - swarm.clock.offset, dur, voice, sMs)),
+    latencyMs: () => realAudio?.latencyMs?.() ?? 0,
   },
   onEvent,
   onPlan: (phrase, ctxs, deadlineMs) => {
@@ -289,7 +292,7 @@ function leaveSong(why = 'left the song (still connected to the swarm)') {
 
 $('start').addEventListener('click', async () => {
   if (swarm.playing) return leaveSong();
-  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE }); // needs this click
+  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE, latencyHint: LATENCY }); // needs this click
   try { await navigator.wakeLock?.request('screen'); } catch {}
   if (swarm.song) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
@@ -384,9 +387,20 @@ $('record')?.addEventListener('click', async () => {
 });
 
 // Dev meters: master peak, an approximate loudness and how often the master went above -0.3 dBFS.
+// Plus audio glitches (where the browser counts them): if the speaker keeps missing deadlines,
+// drop to the lite mix, like the late-tick watchdog does.
+const glitchLog = []; // [time, count] over the last 10 s
 setInterval(() => {
   const el = $('meters');
-  if (el && realAudio) el.textContent = describeMeters(realAudio.meters()) + (realAudio.isLite() ? ' · lite mix' : '') + (SOLO ? ` · solo ${SOLO}` : '') + (FEEL ? '' : ' · feel off');
+  if (!el || !realAudio) return;
+  const g = realAudio.glitches?.();
+  if (g != null && swarm.playing) {
+    const t = performance.now();
+    glitchLog.push([t, g]);
+    while (glitchLog.length && t - glitchLog[0][0] > 10000) glitchLog.shift();
+    if (g - glitchLog[0][1] >= 4 && realAudio.setLite()) log('the audio was glitching: <b>lite mix</b> (one reverb, no widener)');
+  }
+  el.textContent = describeMeters(realAudio.meters()) + (g ? ` · ${g} audio glitch${g === 1 ? '' : 'es'}` : '') + (realAudio.isLite() ? ' · lite mix' : '') + (SOLO ? ` · solo ${SOLO}` : '') + (FEEL ? '' : ' · feel off');
 }, 250);
 
 // --- Parts going out and coming in ------------------------------------------------

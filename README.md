@@ -129,6 +129,18 @@ then the melody. (`murmur-pop` is the earlier, brighter pop draft.)
 5. **The end**: after the outro everyone plays one last chord, and every device leaves the song on
    its own ("the song ended").
 
+**If something goes wrong on the day**
+- *Crackling, "bad radio" static, dropouts*: use a **wired** speaker (or the laptop's own) rather
+  than Bluetooth, which crackles in a room full of 2.4 GHz devices; plug the laptop in (battery
+  saver slows the audio). The page asks for big audio buffers (`?latency=interactive` for the old
+  small ones) and drops to the lite mix by itself if the browser reports glitches ("Under the hood"
+  shows "N audio glitches" where Chrome counts them).
+- *A phone scans the QR code and gets a dark screen or nothing*: the phone must be on the **same
+  Wi-Fi** as the laptop, and venue Wi-Fi often blocks devices from seeing each other; a phone hotspot
+  (laptop and phones all on it) always works. The terminal prints the address in the QR code and the
+  other addresses of the laptop ("if phones can't reach it, try …"); `HOST=<address> node server.js`
+  picks one. Tone.js now comes from the laptop (`npm install` once), so phones need no internet.
+
 Also available: `?demo=murmur-pop` (the pop draft, about 2:27) and `?demo=ode-to-joy-pop` (a pop
 arrangement of Beethoven's theme, about 1:55).
 

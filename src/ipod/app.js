@@ -32,6 +32,10 @@ const ICONS = {
   bass: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M3 16c3-8 5-8 7 0s4 8 6 0 4-8 6 0 4 8 7 0"/></svg>',
   chords: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="7" width="24" height="18" rx="2"/><path d="M10 7v18M16 7v18M22 7v18"/><path d="M8 7h4v10H8zM14 7h4v10h-4zM20 7h4v10h-4z" fill="#4A4A52"/></svg>',
   melody: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M12 23V7l13-3v16"/><circle cx="9" cy="23" r="3.2"/><circle cx="22" cy="20" r="3.2"/></svg>',
+  // the extra layers: a soft swell (pad), rising steps (arp), a shaker (perc)
+  pad: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M3 20c4-10 8-10 13-4s9 6 13-4"/><path d="M3 25c4-6 8-6 13-2s9 4 13-2" opacity="0.5"/></svg>',
+  arp: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="24" r="2.4"/><circle cx="13" cy="18" r="2.4"/><circle cx="20" cy="12" r="2.4"/><circle cx="27" cy="6" r="2.4"/><path d="M8.4 22.4l2.2-2M15.4 16.4l2.2-2M22.4 10.4l2.2-2"/></svg>',
+  perc: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><rect x="10" y="4" width="12" height="18" rx="6"/><path d="M16 22v7"/><path d="M5 9l-2-2M27 9l2-2M5 15H2M27 15h3" opacity="0.6"/></svg>',
   none: '<svg viewBox="0 0 32 32" fill="none" stroke="#B9B9C0" stroke-width="1.8" stroke-dasharray="3 3"><circle cx="16" cy="16" r="10"/></svg>',
 };
 
@@ -441,12 +445,12 @@ function renderStatus() {
   const iconKey = role || 'none';
   if (icon.dataset.k !== iconKey) {
     icon.dataset.k = iconKey;
-    icon.innerHTML = ICONS[iconKey];
+    icon.innerHTML = ICONS[iconKey] ?? ICONS.none; // never 'undefined' for a part without an icon
     icon.classList.remove('pop');
     void icon.offsetWidth;
     icon.classList.add('pop');
   }
-  setText($('instRole'), role ? `${LABELS[role]}${mine.length > 1 ? ` · ${mine.indexOf(role) + 1}/${mine.length}` : ''}` : 'Your part');
+  setText($('instRole'), role ? `${LABELS[role] ?? role}${mine.length > 1 ? ` · ${mine.indexOf(role) + 1}/${mine.length}` : ''}` : 'Your part');
   setText($('instName'), role ? (d?.voice ? voiceById[d.voice]?.label ?? d.voice : 'Choosing…') : playing ? 'Listening' : 'Not playing yet');
   const lvl = role ? (d ? d.level : engine.agents[role].level) : 0;
   $('instLevel').querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', lvl > i));

@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0C1C34" />
 <title>Murmuration</title>
-<script src="https://unpkg.com/tone@15.1.22/build/Tone.js"></script>
+<script src="/vendor/Tone.js"></script><!-- served by server.js from node_modules (falls back to unpkg) -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" />
+<!-- fonts load without blocking the page: with no internet the page still appears, in system fonts -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
 <!--
   Murmuration, iPod edition. All behaviour comes from src/main.js (the same file classic.html runs):
   every element id main.js needs is kept below. src/ipod/app.js only draws the screen and turns the

@@ -18,7 +18,7 @@
 //   npm run measure-levels -- --gate 15            ignore the silent stretches (parts that rest a lot)
 //
 // Browser: Playwright's own Chromium if installed (`npx playwright install chromium`), otherwise
-// the system Chrome. Tone.js normally comes from unpkg; the tool serves node_modules/tone instead,
+// the system Chrome. The page loads Tone.js from server.js (/vendor/Tone.js, node_modules); older pages used unpkg, which the tool also serves from node_modules,
 // so it works with no internet.
 
 import { spawn } from 'node:child_process';
