@@ -47,8 +47,8 @@ test('mix: the EQ does what the plan says (and the kick is left alone)', () => {
 test('mix: drums sit in the room more than the kick, hats are off centre, the rest is centred', () => {
   assert.ok(MIX.strips.body.room > MIX.strips.kick.room, 'the snare gets more room than the kick');
   assert.ok(MIX.strips.hats.pan > 0.1 && MIX.strips.hats.pan < 0.3);
-  for (const n of ['kick', 'body', 'bass', 'melody']) assert.equal(MIX.strips[n].pan, 0, `${n} is centred`);
-  assert.equal(MIX.strips.chords.widen, 0.4);
+  for (const n of ['kick', 'body', 'bass', 'chords', 'melody']) assert.equal(MIX.strips[n].pan, 0, `${n} is centred`);
+  assert.equal(MIX.strips.chords.widen, undefined, 'mono samples: the widener added no width');
   assert.ok(MIX.strips.melody.delay > 0 && MIX.strips.bass.delay == null, 'only the melody is delayed');
   assert.ok(MIX.strips.chords.hall > 0 && MIX.strips.melody.hall > 0 && MIX.strips.bass.hall == null);
 });
@@ -90,7 +90,6 @@ test('lite graph: one reverb, no widener, and the full graph never exceeds two r
   assert.equal(lite.lite, true);
   assert.equal(full.lite, false);
   // mixFor is pure: the shared spec is never edited
-  assert.equal(MIX.strips.chords.widen, 0.4);
   assert.equal(MIX.strips.chords.hall, 0.22);
   assert.ok(MIX.fx.hall && MIX.fx.hall.decay === 2.2);
   assert.equal(MIX.fx.room.decay, 0.9);

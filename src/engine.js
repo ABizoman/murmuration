@@ -22,7 +22,7 @@ const ORDER = ['drums', 'bass', 'chords', 'melody']; // later agents see what ea
 const KEEP_PHRASES = 5;
 
 export class Engine {
-  constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150 }) {
+  constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150, swing = true }) {
     this.agents = Object.fromEntries(agents.map((a) => [a.role, a]));
     this.roles = ORDER.filter((r) => this.agents[r]);
     this.audio = audio; // { play(role, note, whenMs, durMs, voiceId, stepMs) }  whenMs on the same clock as now()
@@ -34,6 +34,9 @@ export class Engine {
     this.composeAheadBars = composeAheadBars;
     this.planAheadBars = planAheadBars;
     this.audioAheadMs = audioAheadMs;
+    // false (?feel=off): the shared swing is ignored on this device. A/B listening on one device only:
+    // with several devices playing together, the device with it off would be out of time.
+    this.swing = swing;
     this.myRoles = new Set(this.roles);
     this.doubling = new Set();
     this.phrases = new Map(); // phrase -> { local: { role: part }, sent: Set }
@@ -149,7 +152,7 @@ export class Engine {
         part.notes.forEach((n, i) => {
           const key = `${role}:${i}`;
           if (entry.sent.has(key)) return;
-          const when = t0 + (n.step + swingOffset(n.step, this.structure.swing) + (n.nudge || 0)) * sMs;
+          const when = t0 + (n.step + (this.swing ? swingOffset(n.step, this.structure.swing) : 0) + (n.nudge || 0)) * sMs;
           if (when > now + this.audioAheadMs) return;
           entry.sent.add(key);
           if (when < now - 20) return; // too late (joined mid-phrase, or tab throttled): skip

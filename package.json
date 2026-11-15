@@ -4,13 +4,17 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "start": "node server.js"
+    "start": "node server.js",
+    "qa": "node tools/qa.mjs",
+    "measure-levels": "node tools/measure-levels.mjs"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
     "ws": "^8.23.0"
   },
   "devDependencies": {
-    "@tonejs/midi": "^2.0.28"
+    "@tonejs/midi": "^2.0.28",
+    "playwright": "^1.65.1",
+    "tone": "^15.1.22"
   }
 }

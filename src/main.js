@@ -35,6 +35,9 @@ const RNG = params.get('rng');
 // ROLE_GAIN in audio.js is measured; ?lite=1 forces the lite graph, ?lite=0 forbids it.
 const SOLO = ROLES.includes(params.get('solo')) ? params.get('solo') : null;
 const LITE = params.has('lite') ? params.get('lite') !== '0' : null;
+// ?feel=off: no swing and no humanising on this device, for a straight-grid "before" clip.
+// Local to the URL that sets it: never use it while several devices play together.
+const FEEL = params.get('feel') !== 'off';
 
 // Songs in songs-local/ (gitignored) are loaded before anything starts, so every device that
 // joins a "song:<id>" seed knows the song.
@@ -56,7 +59,7 @@ const libraryFor = (structure) =>
 // Each agent renders and scores this many candidate parts per phrase (Phase 3). A weak device
 // does less searching rather than missing the compose deadline.
 const CANDIDATE_COUNT = isWeakDevice(navigator) ? CANDIDATES_LITE : CANDIDATES;
-const agents = ROLES.map((r) => new Agent(r, library, randomFor(RNG, r), { candidates: CANDIDATE_COUNT }));
+const agents = ROLES.map((r) => new Agent(r, library, randomFor(RNG, r), { candidates: CANDIDATE_COUNT, feel: FEEL }));
 let realAudio = null;
 let tickTimer = null;
 
@@ -117,7 +120,9 @@ function preloadVoices() {
   realAudio.preload(ids);
 }
 
+let samplesState = null;
 function showSamples({ loaded, loading, failed }) {
+  samplesState = { loaded, loading, failed, total: Object.values(VOICES).flat().filter((v) => !v.synth).length };
   const total = Object.values(VOICES).flat().filter((v) => !v.synth).length;
   $('samples').textContent = `instruments ${loaded}/${total}${loading ? ' loading…' : ''}${failed ? ` (${failed} failed)` : ''}`;
 }
@@ -154,6 +159,7 @@ const engine = new Engine({
   },
   getAdvice: (phrase, role) => jev.advice(phrase, role),
   getDirective: (phrase) => director.directiveFor(phrase),
+  swing: FEEL,
 });
 engine.myRoles = new Set();
 
@@ -299,7 +305,7 @@ $('record')?.addEventListener('click', async () => {
 // Dev meters: master peak, an approximate loudness and how often the master went above -0.3 dBFS.
 setInterval(() => {
   const el = $('meters');
-  if (el && realAudio) el.textContent = describeMeters(realAudio.meters()) + (realAudio.isLite() ? ' · lite mix' : '') + (SOLO ? ` · solo ${SOLO}` : '');
+  if (el && realAudio) el.textContent = describeMeters(realAudio.meters()) + (realAudio.isLite() ? ' · lite mix' : '') + (SOLO ? ` · solo ${SOLO}` : '') + (FEEL ? '' : ' · feel off');
 }, 250);
 
 // --- Parts going out and coming in ------------------------------------------------
@@ -516,8 +522,15 @@ function frame() {
 requestAnimationFrame(frame);
 
 // For tests and debugging in the console.
-window.murmuration = { swarm, engine, jev, director };
+window.murmuration = {
+  swarm, engine, jev, director,
+  // Read-only hooks for tools/measure-levels.mjs: the master meters and the sample loading state.
+  meters: () => (realAudio ? { ...realAudio.meters(), lite: realAudio.isLite() } : null),
+  resetMeters: () => realAudio?.resetMeters(),
+  samples: () => samplesState,
+};
 
 swarm.start();
 renderSwarm();
 if (RNG) log(`reproducible run: rng <b>${esc(RNG)}</b> (same seed + rng = same music)`);
+if (!FEEL) log('<b>feel off</b>: straight grid, no humanising (A/B on this device only; don\'t play with others like this)');

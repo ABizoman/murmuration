@@ -1,7 +1,7 @@
 // The mix, as data (Phase 2 of docs/MUSIC_QUALITY_PLAN.md). audio.js builds the Tone.js graph
 // straight from here, so the whole signal flow can be read -- and tested -- in one place.
 //
-//   per part:  sampler/synth -> strip (highpass + EQ3 + pan or widener) -> bus  (+ sends)
+//   per part:  sampler/synth -> strip (highpass + EQ3 + pan; a widener if a strip asks) -> bus  (+ sends)
 //   drums bus  -> Compressor -> master            (kick, snare/toms and hats have their own strips,
 //   bass bus   -> duck -> Compressor -> master     so the hats can be filtered and panned and the
 //   chords bus -> duck -> master                   snare can have more room than the kick)
@@ -22,7 +22,9 @@ export const MIX = {
     body: { bus: 'drums', pan: 0, room: 0.26 }, // snare and toms: more room than the kick
     hats: { bus: 'drums', pan: 0.15, hp: 300, room: 0.12 },
     bass: { bus: 'bass', pan: 0, hp: 35, eq: { mid: -2, lowFrequency: 150, highFrequency: 500 } },
-    chords: { bus: 'chords', hp: 180, widen: 0.4, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
+    // No widener: the samples are mono, so StereoWidener added no width and cost level. Width comes
+    // from the synth pad's stereo Chorus instead (audio.js).
+    chords: { bus: 'chords', pan: 0, hp: 180, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
     melody: { bus: 'melody', pan: 0, hp: 220, hall: 0.16, delay: 0.18, eq: { high: 1.5, highFrequency: 2500 } },
   },
   buses: {

@@ -17,8 +17,8 @@
 
 import { DENSITIES } from './loops.js';
 import { renderPhrase } from './render.js';
-import { ruleScores, runLength } from './decide/rules.js';
-import { decide, candidateDecisions, pickCandidate, CONTINUITY_BONUS, QUESTIONS } from './decide/select.js';
+import { ruleScores, runLength, SECTION_PHRASES } from './decide/rules.js';
+import { decide, candidateDecisions, pickCandidate, CONTINUITY_BONUS_BY_ROLE, CONTINUITY_HOLD, QUESTIONS } from './decide/select.js';
 import { applyInteraction } from './decide/transform.js';
 import { fitScore, describeFit } from './decide/fit.js';
 import { humanise } from './feel.js';
@@ -35,8 +35,9 @@ const median = (xs) => {
 };
 
 export class Agent {
-  constructor(role, library, random = Math.random, { candidates = CANDIDATES } = {}) {
+  constructor(role, library, random = Math.random, { candidates = CANDIDATES, feel = true } = {}) {
     this.role = role;
+    this.feel = feel; // false (?feel=off): the winner is played straight, for A/B listening only
     this.library = library;
     this.random = random;
     this.candidates = candidates;
@@ -85,10 +86,16 @@ export class Agent {
     // A part with no notes is neither a good nor a bad fit, so it takes the middle of what the
     // others scored: resting stays as likely as the rules think it should be.
     const neutral = median(cands.filter((c) => c.fit).map((c) => c.fit.total)) ?? 0.5;
+    // Keep the groove for the section: a candidate that replays exactly last phrase's loop gets a
+    // role-specific bonus (step A5), except on the first phrase of a director section, where the
+    // band is free to change. Depends only on the phrase number, so every device agrees.
+    // Chords and melody only get it while the pattern is still new (held < 3 phrases), as before.
     const held = runLength(ctx.history, 'style');
+    const fresh = held < (CONTINUITY_HOLD[this.role] ?? Infinity);
+    const bonus = ctx.phrase % SECTION_PHRASES === 0 || !fresh ? 0 : CONTINUITY_BONUS_BY_ROLE[this.role] ?? 0;
     for (const c of cands) {
       c.fit ||= { total: neutral, terms: {} };
-      c.bonus = c.kind === 'continuity' && held < 3 ? CONTINUITY_BONUS : 0; // keep a new groove
+      c.bonus = c.loop && c.loop.id === this.lastLoopId ? bonus : 0;
     }
 
     const { index, probs } = pickCandidate(cands, { dist, random: this.random });
@@ -114,7 +121,7 @@ export class Agent {
     }
     // Last step: the groove. Deterministic from (seed, phrase, role, note), so the device that
     // takes this part over or doubles it plays the same performance, down to the millisecond.
-    const notes = humanise(win.notes, {
+    const notes = !this.feel ? win.notes : humanise(win.notes, {
       role: this.role,
       phrase: ctx.phrase,
       seed: ctx.structure.seed,

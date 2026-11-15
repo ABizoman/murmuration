@@ -35,19 +35,36 @@ Other switches for listening work:
 | `?rng=test1` | fixes every agent's random stream: same seed + same rng = same music |
 | `?solo=bass` | hears one part on its own (`drums`, `bass`, `chords`, `melody`) — how `ROLE_GAIN` is measured |
 | `?lite=1` / `?lite=0` | forces the lite mix on or off instead of deciding from the device |
+| `?feel=off` | no swing and no humanising on **this device only**: a straight-grid "before" clip for any feel change. Never use it while several devices play together (that device would be out of time with the others) |
 
-**Re-measuring `ROLE_GAIN`** (in `src/audio.js`, after any change to `src/mix.js`): open
-`?rng=test1&solo=drums`, press Start, let it play a few phrases and read the loudness from the
-meters; repeat for each part; then move each `ROLE_GAIN` by the difference so all four land within
-about 1 dB of each other. Finally play everything together and check the peak stays under −1 dB and
-the clip counter stays at 0.
+**A feel A/B in one URL change:** `?rng=test1` then `?rng=test1&feel=off`. The decisions are
+identical; only the swing and the humanising differ.
+
+**Re-measuring `ROLE_GAIN`** (in `src/audio.js`, after any change to `src/mix.js` or a voice's
+`gain`): `npm run measure-levels`. It starts the server on a spare port, plays each part on its own
+in headless Chrome (`?solo=<role>&lite=0`) for 40 s, reads the master meters and prints the change
+each part needs to reach the target balance: **drums and bass equal, chords 2 dB below them, melody
+1 dB above the chords**. `--apply` writes the new values into `src/audio.js` (run it again to
+confirm), `--full` also plays the whole band and checks the peak stays under −1 dBFS with no clips,
+and `--extra voice=chords:synth-pad` adds URL parameters to every run. It uses Playwright's
+Chromium if installed (`npx playwright install chromium`) or else the system Chrome, and serves
+Tone.js from `node_modules`, so it works offline.
+
+By hand: open `?rng=test1&solo=drums`, press Start, let it play a few phrases and read the loudness
+from the meters; repeat for each part; move each `ROLE_GAIN` by the difference; then play everything
+together and check the peak stays under −1 dB and the clip counter stays at 0.
+
+**`npm run qa`** runs the whole band in Node for 40 phrases on five seeds (fixed rng, the real pack
+library, no browser) and prints the fit of every part, how often each part changes loop and
+instrument, and the melody's continuity. `npm run qa -- --save <name>` also writes the report to
+`docs/qa/<name>.txt`, so the numbers can be compared from one change to the next.
 
 ## The mix
 
 `src/mix.js` holds the whole signal flow as data and `src/audio.js` builds the Tone.js graph from it:
 
 ```
-per part:   sampler/synth → strip (highpass + EQ3 + pan or widener) → bus   (+ sends)
+per part:   sampler/synth → strip (highpass + EQ3 + pan) → bus   (+ sends)
 drums bus   → Compressor (ratio 4) ─┐          kick, snare/toms and hats each have their own strip,
 bass bus    → duck → Compressor (3) ┤          so the hats can be filtered and panned and the snare
 chords bus  → duck ─────────────────┤          can sit further back in the room than the kick
@@ -62,7 +79,7 @@ sidechain and no analysis. Each drum kit therefore loads three samplers (kick / 
 hats), one per route.
 
 Weak devices (four cores or fewer, or the frame watchdog in `src/main.js` noticing that the engine's
-ticks are slipping) switch to the **lite** graph: one reverb instead of two and no widener, which
+ticks are slipping) switch to the **lite** graph: one reverb instead of two, which
 keeps a phone in time. `npm test` checks the routing, the ducking and the lite graph against a fake
 Tone.js (`test/fake-tone.mjs`), so the signal flow is covered even though the sound is not.
 

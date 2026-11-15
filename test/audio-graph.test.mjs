@@ -60,7 +60,7 @@ test('graph: chords and melody get the hall, only the melody gets the delay', as
   const audio = await makeAudio();
   t.after(() => audio.dispose());
   const chords = routes(played(audio, 'chords', note({ midis: [60, 64, 67] }))[0].node);
-  assert.ok(chords.every((p) => p.includes('Filter(180 highpass)') && p.includes('Widener(0.4)')), `chords:\n${chords.join('\n')}`);
+  assert.ok(chords.every((p) => p.includes('Filter(180 highpass)') && !p.includes('Widener')), `chords:\n${chords.join('\n')}`);
   assert.ok(chords.some((p) => p.includes('Reverb(2.2)')));
   assert.ok(!chords.some((p) => p.includes('PingPongDelay')));
   const melody = routes(played(audio, 'melody', note({ midi: 72 }))[0].node);

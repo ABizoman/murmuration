@@ -16,6 +16,11 @@ const JEV_FLOOR = 0.03;
 export const LAMBDA = 6; // how much the fit counts against the rules' and Jev's opinion
 export const TEMPERATURE = 0.35; // softmax temperature: variety, but a strong preference for fit
 export const CONTINUITY_BONUS = 0.3; // for carrying on with the same groove, while it is still new
+// Per role (step A5): a pop drummer keeps a groove for a section, the melody may move more.
+// Given to a candidate that plays exactly the loop this part played last phrase (agent.js).
+export const CONTINUITY_BONUS_BY_ROLE = { drums: 0.8, bass: 0.5, chords: 0.4, melody: 0.3 };
+// ...for chords and melody only while the pattern has been held fewer phrases than this.
+export const CONTINUITY_HOLD = { chords: 3, melody: 3 };
 const PRIOR_FLOOR = 1e-6;
 
 export function normalise(weights) {

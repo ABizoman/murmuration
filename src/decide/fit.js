@@ -236,7 +236,12 @@ const contour = (notes) => {
   return l.slice(1).map((m, i) => Math.sign(m - l[i]));
 };
 
-// Similar to my own last phrase, but not identical: half rhythm, half melodic shape.
+// How similar to my own last phrase each role should be. A melody should vary; a pop drummer
+// repeats the groove exactly, and the bass and chords mostly do (step A5: an identical drum
+// phrase used to score 0.17 here, which made the drums swap loop every other phrase).
+export const CONTINUITY_TARGET = { drums: [0.8, 1], bass: [0.5, 0.9], chords: [0.5, 0.9], melody: [0.4, 0.75] };
+
+// Similar to my own last phrase, but (for the melody) not identical: half rhythm, half melodic shape.
 function continuity(notes, ctx) {
   const last = ctx.last || ctx.history?.[0] || null;
   if (!notes.length || !last?.notes?.length) return null;
@@ -248,7 +253,7 @@ function continuity(notes, ctx) {
     for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) same++;
     sim = 0.5 * rhythmSim + 0.5 * (same / Math.max(a.length, b.length));
   }
-  return inRange(ctx.hook ? [0.9, 1] : [0.4, 0.75], sim);
+  return inRange(ctx.hook ? [0.9, 1] : CONTINUITY_TARGET[ctx.role] || CONTINUITY_TARGET.melody, sim);
 }
 
 // Drummer's job: lock the kick to the bass, keep a backbeat once there is any weight, and save

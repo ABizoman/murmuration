@@ -314,3 +314,74 @@ Menu → Under the hood shows the meters, each part's `why` ("best of 6: on the 
 clashes") and the full fit breakdown with the winner's rank. `classic.html` shows the same with the
 grid. Nothing needs the network: with the server killed, decisions fall back to the rules and the
 mix, feel and scoring are unaffected.
+
+---
+
+# Phases 4–7 (from `docs/MUSIC_QUALITY_HANDOFF.md`)
+
+## Step A — loose ends and QA tooling
+
+### Built
+- `tools/measure-levels.mjs` (`npm run measure-levels`): Playwright + headless Chrome, server on a
+  spare port, `classic.html?rng=levels&solo=<role>&lite=0`, waits for every sample, reads the
+  master meters for 40 s (energy average of the loudness), prints the change per role to reach the
+  target balance; `--apply`, `--full`, `--extra`, `--roles`, `--seconds`. Tone.js is served from
+  `node_modules/tone` (devDependency) instead of unpkg, so it runs offline.
+- `window.murmuration.meters()`, `.resetMeters()`, `.samples()`: read-only hooks for the tool.
+- `ROLE_GAIN` re-measured and applied: `{ drums: -11.5, bass: 9, chords: 9, melody: 6.5 }`
+  (was `{ drums: -5, bass: 8, chords: 3, melody: 7 }`).
+- Chords strip: no widener (`src/mix.js`), centred; tests updated.
+- `?feel=off`: `Agent({ feel: false })` skips `humanise()`, `Engine({ swing: false })` ignores
+  `structure.swing` at schedule time. Logged and shown on the meters line. README documents it as
+  single-device only.
+- Groove stability: `CONTINUITY_BONUS_BY_ROLE` (`select.js`) and `CONTINUITY_TARGET` per role
+  (`fit.js`); see judgement calls.
+- `tools/sim.mjs` (a whole band on one engine in Node) and `tools/qa.mjs` (`npm run qa`,
+  `--save <name>` writes `docs/qa/<name>.txt`). `docs/qa/before-A.txt` is main before this step,
+  `docs/qa/A.txt` after.
+- `test/stepA.test.mjs`: `?feel=off`, the drum continuity target, the QA change counter, and a guard
+  that both pages carry every element id `main.js` looks up.
+
+### Judgement calls and deviations
+1. **The real cause of drum churn was the continuity term, not the bonus.** Its target was
+   0.4–0.75 for every role, so a drummer repeating the groove exactly scored **0.17** and the
+   scorer actively pushed the drums off their own groove. Targets are now per role: drums 0.8–1,
+   bass 0.5–0.9, chords 0.5–0.9, melody 0.4–0.75 (unchanged). A hook still overrides with 0.9–1.
+2. **The bonus goes to any candidate that replays last phrase's exact loop** (not only the
+   "continuity" candidate, which `library.find` re-rolls 25% of the time), with the handoff's
+   numbers 0.8 / 0.5 / 0.4 / 0.3. It is **off on the first phrase of each director section**
+   (`phrase % 4 === 0`), so the band can still change at section starts; for chords and melody it
+   also stops once the pattern has been held 3 phrases, as before (otherwise chords and melody sat
+   on one loop for 10+ phrases). All of it depends only on the phrase number and the shared score.
+3. **"`fit.terms.drums` ≥ 0.95" was not a reachable reading of the old number.** With `?rng=`-style
+   streams the drums term was 0.80–0.85 before this step, and its kick-lock half is never computed
+   yet (the bass is never "fresh" for the drums until Phase 6). It went *up*, 0.82 → 0.88.
+4. Tests changed on purpose: the drums no longer have to change busyness without a director
+   (they hold the groove and change pattern; a new test shows they follow an energy change and
+   rarely change loop inside a section), and best-of-6 vs most-likely is now "no worse per seed,
+   +0.015 pooled" (the bonus trades a little fit for stability; the clash test is unchanged).
+5. **Fixed a pre-existing bug:** `classic.html` had no `#song` picker, so `main.js` threw on load
+   and the classic UI has been dead since song mode was merged. Added the picker and the id guard.
+6. The whole band is now ~2.5 dB quieter (loudness −21.2 vs −18.7) because the drums were carrying
+   it. There is 4 dB of headroom left (peak −5.2 dBFS); a master gain could take some if needed.
+
+### Measured
+- Tests: **103 passing**.
+- Levels (40 s each, `rng=levels`): drums −24.1, bass −25.1, chords −27.3, melody −26.3 dB; worst
+  0.8 dB from the target balance. Full band: loudness −21.2 dB, **peak −5.2 dBFS, 0 clips**.
+- `npm run qa`, 5 seeds × 40 phrases (before → after):
+
+| | before | after |
+|---|---|---|
+| drums loop changes | 114/190 | **26/190** (durhack **7/38**) |
+| bass / chords / melody loop changes | 80 / 93 / 67 | 48 / 63 / 66 |
+| drums fit | 0.81 | 0.90 |
+| band fit | 0.87 | 0.89 |
+| melody continuity | 0.33 | 0.32 |
+
+### Not verified / needs ears
+- [ ] The new balance on real speakers (chords up 6 dB, drums down 6.5 dB): is the piano/guitar now
+      audible under the melody? Are the drums still punchy enough?
+- [ ] Grooves held for a section: does it feel like a band, or too static?
+- [ ] `?feel=off` vs on: is the humanising audible and better?
+- [ ] `classic.html` loads and plays again.

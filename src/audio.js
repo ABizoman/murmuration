@@ -18,7 +18,7 @@ const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D
 const DRUM_LEN = { kick: 0.6, snare: 0.5, hat: 0.06, ohat: 0.35, tom1: 0.6, tom2: 0.6, tom3: 0.7, crash: 1.2, ride: 0.5 };
 // Measured by soloing each part (?solo=<role>) and reading the loudness meter in "Under the hood".
 // Re-measure after any change to the graph in mix.js; see "How to A/B a change" in the README.
-const ROLE_GAIN = { drums: -5, bass: 8, chords: 3, melody: 7 };
+const ROLE_GAIN = { drums: -11.5, bass: 9, chords: 9, melody: 6.5 };
 
 // Perceptual loudness: velocity 0.5 should sound about half as loud, which is not half the
 // amplitude. Flat velocities were part of why the band sounded like a machine.

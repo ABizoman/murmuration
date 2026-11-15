@@ -228,7 +228,13 @@ test('simulation: 40 phrases of four agents reacting to each other stay valid an
   const interactions = late.filter((x) => x.part.d.interaction !== 'none');
   assert.ok(interactions.length / late.length > 0.15 && interactions.length / late.length < 0.85, `interaction share ${interactions.length}/${late.length}`);
   assert.ok(new Set(late.map((x) => `${x.role}:${x.part.d.interaction}`)).size >= 5, 'several kinds of echo/answer happen');
-  for (const r of ROLES) assert.ok(new Set(late.filter((x) => x.role === r).map((x) => x.part.d.level)).size >= 2, `${r} changes busyness`);
+  // The drums keep their groove for a section (step A5), so with no direction they may hold one
+  // level throughout: they still change pattern. The test below checks they follow the energy.
+  for (const r of ROLES) {
+    const mine = late.filter((x) => x.role === r);
+    if (r === 'drums') assert.ok(new Set(mine.map((x) => x.part.loop?.id)).size >= 2, 'drums change pattern');
+    else assert.ok(new Set(mine.map((x) => x.part.d.level)).size >= 2, `${r} changes busyness`);
+  }
   // balance: the band's average level stays near the middle
   const avg = late.reduce((a, x) => a + x.part.d.level, 0) / late.length;
   assert.ok(avg > 1.5 && avg < 2.5, `average level ${avg}`);
@@ -285,6 +291,29 @@ test('takeover: a device that gains a role continues the announced part, then de
   const next = e.ensureParts(4).local.bass;
   assert.equal(e.context(4, 'bass').last.style, 'pulse', 'history comes from the shared score');
   assert.ok(next.d);
+});
+
+test('drums keep a groove inside a section and change busyness when the energy changes', () => {
+  // energy 0.15 for two sections, then 0.95: the drums should be lighter first, busier after
+  let t = 0;
+  const rand = rng(11);
+  const parts = [];
+  const e = new Engine({
+    agents: ROLES.map((r) => new Agent(r, lib, rand)), now: () => t, audio: { play() {} },
+    onEvent: (ev) => parts.push(ev),
+    getDirective: (p) => sanitiseDirective({ energy: p < 8 ? 0.15 : 0.95 }),
+  });
+  e.start(structure, 0);
+  for (t = 0; t < 16 * 64 * stepMs(structure.bpm); t += 50) e.tick();
+  const drums = parts.filter((x) => x.role === 'drums' && x.phrase >= 2 && x.phrase < 16);
+  const lvl = (lo, hi) => drums.filter((x) => x.phrase >= lo && x.phrase < hi).map((x) => x.part.d.level);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  assert.ok(mean(lvl(9, 16)) > mean(lvl(2, 8)) + 0.5, `levels ${lvl(2, 8)} -> ${lvl(9, 16)}`);
+  // inside a section (not its first phrase) the loop rarely changes
+  const inside = drums.filter((x) => x.phrase % 4 !== 0);
+  const prev = new Map(drums.map((x) => [x.phrase, x.part.loop?.id]));
+  const changed = inside.filter((x) => prev.has(x.phrase - 1) && prev.get(x.phrase - 1) !== x.part.loop?.id).length;
+  assert.ok(changed <= 3, `drums changed loop ${changed} times inside sections`);
 });
 
 test('packs: every loop is valid and renders in range in any key', async () => {
