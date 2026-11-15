@@ -167,3 +167,22 @@ test('songs: a newer generation (next / previous / a new seed) replaces the song
   assert.equal(songWins({ seed: 'c', startMs: 500 }, { seed: 'd', startMs: 900 }), true, 'same generation: the earlier start');
   assert.equal(songWins({ seed: 'c', startMs: 500 }, { seed: 'd', startMs: 900, gen: 2 }), false, 'a missing gen counts as 0');
 });
+
+test('grow mode: each device plays only its own part, claimed in band order; off: one device plays all', async () => {
+  const { nextClaim, rolesFor } = await import('../src/swarm/roles.js');
+  const { parseSeed, withGrow, structureFromSeed } = await import('../src/seed.js');
+  const { formFromStructure, formDirective } = await import('../src/form.js');
+  assert.equal(nextClaim('a', [], null, { grow: true }), 'drums', 'the beat first');
+  assert.equal(nextClaim('b', [{ id: 'a', role: 'drums', ts: 1 }], null, { grow: true }), 'bass');
+  assert.equal(nextClaim('a', []), 'chords', 'normal order unchanged');
+  const claims = [{ id: 'a', role: 'drums', ts: 1 }];
+  assert.deepEqual([...rolesFor('a', claims, ['a'], { grow: true })], ['drums'], 'alone in grow mode: just my part');
+  assert.equal(rolesFor('a', claims, ['a']).size, 7, 'alone normally: the whole band');
+  assert.equal(parseSeed(withGrow('x#pop', true)).grow, true);
+  assert.equal(withGrow('x#pop#end', true), 'x#pop#grow#end');
+  // whoever has joined plays: no section sits a part out
+  const form = formFromStructure(structureFromSeed('x#grow'));
+  assert.ok(form.grow);
+  assert.ok(Object.values(formDirective(form, 0).plan).every((v) => v !== 'out'), 'the intro plays everyone who has joined');
+  assert.ok(Object.values(formDirective(formFromStructure(structureFromSeed('x')), 0).plan).includes('out'));
+});

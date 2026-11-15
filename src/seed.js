@@ -54,21 +54,25 @@ const clampSwing = (x) => Math.min(MAX_SWING, Math.max(0, Number(x) || 0));
 // Tags after the seed, carried in the seed so every device that joins knows them:
 //   "#end"   the song ends after one pass of the form (form.js) instead of looping
 //   "#pop"   improvise in the upbeat-pop style instead of the default (dance); "#dance" is the default
+//   "#grow"  the demo: each device plays only its own part, so the band builds one device at a time
+//            (swarm/roles.js); sections that would sit a part out play it lightly instead (form.js)
 // e.g. "durhack#pop#end". The rest of the music is decided from the plain seed.
 export const END_SUFFIX = '#end';
 export function parseSeed(seed) {
   const [base, ...tags] = String(seed ?? '').split('#');
   const style = tags.find((t) => FAMILY_TAGS[t]) ?? null;
-  return { base, end: tags.includes('end'), style };
+  return { base, end: tags.includes('end'), style, grow: tags.includes('grow') };
 }
-const joinSeed = ({ base, end, style }) => `${base}${style && style !== 'dance' ? `#${style}` : ''}${end ? END_SUFFIX : ''}`;
+const joinSeed = ({ base, end, style, grow }) => `${base}${style && style !== 'dance' ? `#${style}` : ''}${grow ? '#grow' : ''}${end ? END_SUFFIX : ''}`;
+export const withGrow = (seed, grow) => joinSeed({ ...parseSeed(seed), grow: !!grow });
 export const withEnd = (seed, end) => joinSeed({ ...parseSeed(seed), end: !!end });
 export const withStyle = (seed, style) => joinSeed({ ...parseSeed(seed), style: FAMILY_TAGS[style] ? style : null });
 
 export function structureFromSeed(fullSeed) {
-  const { base: seed, end, style } = parseSeed(fullSeed);
+  const { base: seed, end, style, grow } = parseSeed(fullSeed);
   let s = structureFromBase(seed, FAMILY_TAGS[style] ?? DEFAULT_FAMILY);
   if (end) s = { ...s, end: true, ...(s.form ? { form: { ...s.form, end: true } } : {}) };
+  if (grow) s = { ...s, grow: true, ...(s.form ? { form: { ...s.form, grow: true } } : {}) };
   return s;
 }
 

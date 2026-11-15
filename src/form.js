@@ -75,14 +75,17 @@ export function songForm(song) {
 // The upbeat-pop form when improvising; a song's own form if it has sections (seed.js puts it on
 // the structure); null for a song without sections.
 export function formFromStructure(structure) {
-  if (structure?.form) return structure.end && !structure.form.end ? { ...structure.form, end: true } : structure.form;
+  if (structure?.form) {
+    const f = structure.end && !structure.form.end ? { ...structure.form, end: true } : structure.form;
+    return structure.grow && !f.grow ? { ...f, grow: true } : f;
+  }
   if (!structure || structure.song) return null;
   const sections = POP_FORM.map((s) => ({ ...s, plan: { ...s.plan }, transitionIn: [...s.transitionIn] }));
   const starts = [];
   let at = 0;
   for (const s of sections) { starts.push(at); at += s.phrases; }
   const loopIndex = sections.findIndex((s) => s.name === LOOP_FROM);
-  return { sections, starts, length: at, loopIndex, loopStart: starts[loopIndex], end: !!structure.end };
+  return { sections, starts, length: at, loopIndex, loopStart: starts[loopIndex], end: !!structure.end, grow: !!structure.grow };
 }
 
 // Where a phrase sits in the form. Pure function of (form, phrase).
@@ -131,7 +134,8 @@ export function formDirective(form, phrase, director = DEFAULT_DIRECTIVE, weight
     drop,
     pair,
     note: dir.note ?? '',
-    plan: { ...section.plan },
+    // grow mode: whoever has joined plays (a section that would sit a part out plays it lightly)
+    plan: form.grow ? Object.fromEntries(Object.entries(section.plan).map(([r, v]) => [r, v === 'out' ? 'light' : v])) : { ...section.plan },
     section: section.name,
     hook: !!section.hook,
     sectionIndex: at.index,

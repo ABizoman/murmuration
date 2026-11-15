@@ -1,5 +1,5 @@
 import { KEYS } from './theory.js';
-import { structureFromSeed, randomFor, parseSeed, withEnd, withStyle } from './seed.js';
+import { structureFromSeed, randomFor, parseSeed, withEnd, withStyle, withGrow } from './seed.js';
 import { formFromStructure, formDirective, describeSection } from './form.js';
 import { HookBook } from './hooks.js';
 import { STYLE_FAMILIES } from './styles.js';
@@ -46,7 +46,10 @@ const RNG = params.get('rng') ?? (DEMO ? 'demo' : null);
 // Dev switches for the mix (Phase 2): ?solo=<role> hears one part on its own, which is how
 // ROLE_GAIN in audio.js is measured; ?lite=1 forces the lite graph, ?lite=0 forbids it.
 const SOLO = ROLES.includes(params.get('solo')) ? params.get('solo') : null;
-const LITE = params.has('lite') ? params.get('lite') !== '0' : null;
+// The lite mix (one reverb, no widener) is what phones always used; now every device uses it, the
+// laptop too, so the band sounds the same everywhere and the laptop keeps headroom. ?lite=0 for
+// the full mix (the hall reverb).
+const LITE = params.has('lite') ? params.get('lite') !== '0' : true;
 // ?part=<role>: claim this part if nobody has it (the demo's speaker laptop takes the drums).
 const PART = ROLES.includes(params.get('part')) ? params.get('part') : DEMO ? 'drums' : null;
 // ?feel=off: no swing and no humanising on this device, for a straight-grid "before" clip.
@@ -275,7 +278,8 @@ $('song').addEventListener('change', () => {
 // unless ?seed=<text> asks for one. Type a seed in the Menu to play the same song again.
 $('seed').value = params.get('seed') || randomSeed();
 function showSeed(seed) {
-  const { base, end, style } = parseSeed(seed);
+  const { base, end, style, grow } = parseSeed(seed);
+  if ($('grow')) $('grow').checked = grow;
   const song = songFromSeed(base);
   $('song').value = song ? song.id : '';
   if (!song) $('seed').value = base;
@@ -286,9 +290,11 @@ function showSeed(seed) {
 const chosenSeed = () => {
   const song = $('song').value;
   const base = song ? songSeed(song) : withStyle($('seed').value.trim() || 'durhack', $('style')?.value);
-  return withEnd(base, !!$('endAfterPass')?.checked);
+  return withGrow(withEnd(base, !!$('endAfterPass')?.checked), !!$('grow')?.checked);
 };
-for (const id of ['endAfterPass', 'style']) {
+// ?grow=1: the demo mode (each device plays only its own part) ticked from the start.
+if ($('grow') && ['1', 'true', 'yes'].includes(params.get('grow'))) $('grow').checked = true;
+for (const id of ['endAfterPass', 'style', 'grow']) {
   $(id)?.addEventListener('change', () => {
     seedEdited = true;
     showStructure(chosenSeed());
