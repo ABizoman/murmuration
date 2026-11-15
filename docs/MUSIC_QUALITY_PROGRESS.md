@@ -467,3 +467,87 @@ mix, feel and scoring are unaffected.
       would play them).
 - [ ] Does the band sound like upbeat pop at 104–124 bpm? Melody: POP909 lines vs the builtin ones.
 - [ ] One instrument change per section: too often or not often enough?
+
+## Step C (Phase 5) — form, hooks, transitions, ending (improvising)
+
+### Built
+- **C1** `src/form.js`: `POP_FORM` (the handoff's sections, energies and plans; `transitionIn` per
+  section), `formFromStructure` (null for songs), `sectionAt` (pure, loops back to verse2 with a
+  `pass` count; with `structure.end` one `end` coda phrase and then `ended`), `formDirective` (form
+  leads, director nudges: `energy = section + 0.4·(director − 0.5)`, feature/pair dropped if they
+  involve a part that sits out, drop only for a `normal` part; adds `plan`, `section`, `hook`,
+  first/last-phrase flags, `transitionIn`, `nextTransitionIn`, `dropLastBar`, `end`),
+  `describeSection`. Wired in `main.js` (`getDirective`), recomputed in `playSong`; the director
+  LLM is told the upcoming section names; the director panel shows "song form: chorus (1 of 2)".
+- **C2** `rules.js` `clampToPlan` (out / light / normal / full as specified); `ENTRY` only applies
+  without a form.
+- **C3** `src/hooks.js` `HookBook` (earliest phrase wins, ties lowest device id, junk rejected).
+  The engine records a part's loop as its hook on the first phrase of the first hook section and
+  emits `{ type: 'hook' }`; `main.js` publishes it (`{ type: 'hook', seed, ... }`), records incoming
+  ones for the same seed, and sends the whole book in the welcome to joiners. `buildContext` gets
+  `hook`, `section`, `hookEntry`. `Agent.compose` puts the pinned hook candidate first in hook
+  sections (exact loop via the new `library.get(id)`): it wins outright for the melody, +2 for bass
+  and chords. In verses the melody gets `ctx.hookRef` (the hook rendered over this phrase) and
+  `fit.js` continuity also scores the relation to it (target 0.4–0.7, averaged with the usual term).
+- **C4** `src/transitions.js` (`applyTransitions`, `makeFill`, `endNotes`, `transitionsIn`), applied
+  to the winner before `humanise()`: fill (last 4 or 8 steps, seeded by (seed, phrase, 'fill'),
+  snare then toms walking down, velocity 0.5 → 0.95; kept as is when the loop's last bar is already
+  a fill), crash on step 0 (hat removed, kick ensured), riser at step 48 for 16 steps (also when the
+  drums sit out), and the breakdown's last-bar drop for bass and melody (notes ringing into it cut).
+- **C5** "End after one pass": checkbox `#endAfterPass` on both pages; carried as a **seed suffix**
+  `<seed>#end` (`parseSeed`, `withEnd`; `songFromSeed` ignores it). The coda: chords hold the tonic
+  (root, third, fifth, octave) for two bars, the bass the root, the melody the tonic, the drums kick
+  + crash. After three bars of it the engine stops and emits `{ type: 'end' }`; `main.js` leaves the
+  song like the Leave button and logs "the song ended".
+- `npm run qa` checks the form: sections in order against the written form, the hook in later
+  chorus phrases, chorus melody continuity, fills / crashes / risers where the form says (and
+  nowhere else). `tools/sim.mjs` drives the engine with `formDirective` like `main.js`.
+- `test/stepC.test.mjs` (11 tests, including two engines in memory agreeing on hooks and
+  transitions and the hook surviving a takeover).
+
+### Judgement calls and deviations
+1. **`#end` in the seed, not the swarm's song state**: `swarm.considerSong` copies only `seed` and
+   `startMs`, and the seed already reaches every device (and survives rejoining). The music is
+   identical with or without the suffix.
+2. **The first phrase of a section is not judged on continuity.** Every section change changed the
+   level and so the loop, and continuity scored ~0 there (band fit fell 0.90 → 0.83). A new
+   section is meant to change; the hook section's first phrase has the hook as its reference.
+3. **The hook is chosen carefully, once:** the first chorus phrase draws twice the candidates and
+   takes the best fit instead of a sample (it will be repeated every chorus). Before this the
+   melody hooks had harmony 0.68.
+4. **No seeded "deterministic fallback" hook.** Only the device that owns a part composes it, so the
+   first chorus's winner is unambiguous; a device that takes over later gets the hook from the
+   hook message or the welcome. If a device has no entry when it reaches a hook section, its own
+   winner becomes the hook (and is published) — the HookBook's earliest-wins rule then settles any
+   disagreement. If the hook loop is missing from a device's library, it falls back to normal
+   scoring (as specified).
+5. **`fit.js` is not told about transitions**: they are added *after* scoring, so the candidates
+   are scored on their own loops and a generated fill can never cost a candidate points.
+6. Groove stability and the A5 groove bonus now also release on the first phrase of a **form**
+   section (they used to release only every 4 phrases, which the form's 1–2-phrase sections
+   don't line up with). Instrument changes stay on the director's 4-phrase grid.
+7. The handoff's form adds up to **14 phrases** (not 16): about two minutes at 110 bpm.
+
+### Measured
+- Tests: **128 passing**.
+- `npm run qa` (5 seeds × 40 phrases): band fit **0.91** (B 0.90); sections in order **yes**; hook
+  in later chorus phrases **100%**; chorus melody continuity **0.93**; fills **60/60**, crashes
+  **70/70**, risers **50/50**; on-family styles 100%, instruments 98%; ≤ 1 instrument change per
+  section start.
+- End to end in headless Chrome (`/?rng=c`, End after one pass): the form shows on the director
+  panel, hooks are reused, the song stops by itself after 130 s ("the song ended"), no page errors,
+  master peak −4.0 dBFS, 0 clips.
+
+### Deferred, decided with the humans
+- **The melody sounds sour** (heard after step B). To be fixed at the end, together with any other
+  sound changes: candidates are lowering the POP909 melody weight (`styles.js`), raising the clash
+  weight for the melody, or choosing the hook with clash as a hard limit. The end-to-end run shows
+  chosen hooks still reporting "some clash (34%)".
+- No more time on level measurements unless the mix changes.
+
+### Not verified / needs ears
+- [ ] The energy curve: intro → verse → pre → chorus → … → final chorus. Does the chorus lift?
+- [ ] The hook: is the chorus recognisably the same each time? (Tick "End after one pass" to hear
+      a full song in ~2 minutes: `/?rng=c`.)
+- [ ] Fills, crash and riser: levels (`FX_DB` in `audio.js`) and whether the riser is too long.
+- [ ] The breakdown's last-bar drop and the final chord.

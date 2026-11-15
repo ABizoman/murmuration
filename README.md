@@ -77,6 +77,29 @@ start of a 4-phrase section, one part at a time, and each part keeps its instrum
 two sections; the drums and the bass keep their groove for the whole section unless the energy
 jumps. Song mode ignores the family: a song brings its own tempo, chords and instruments.
 
+## The song form (improvising)
+
+An improvised song follows a pop form (`src/form.js`), the same on every device because it is a
+pure function of the phrase number:
+
+```
+intro 1 · verse 2 · pre 1 · chorus 2 · verse2 2 · chorus 2 · breakdown 1 · finalChorus 2 · outro 1
+```
+
+(phrases of 4 bars; after the outro it goes round again from verse2). Each section sets the energy
+and how much each part plays (sitting out, light, normal, full); the director's suggestions nudge
+the energy by up to ±0.2 but never bring in a part the section leaves out. The first time a part
+plays the first chorus, its loop becomes its **hook** (`src/hooks.js`): every later chorus plays
+it again, on whichever device has the part, and the verses' melody is scored to relate to it. The
+drums add a **fill** in the last bar before the pre, choruses and verse2, a **crash** on the first
+downbeat of choruses and verse2, and a **riser** under the bar before each chorus
+(`src/transitions.js`); in the breakdown's last bar only the chords keep playing.
+
+**End after one pass** (Menu → Song, or the checkbox on `classic.html`) adds `#end` to the seed, so
+every device that joins knows: after the outro the band plays one last chord together and every
+device leaves the song on its own ("the song ended" in the log). Songs from `src/songs/` have no
+form yet (that is step E).
+
 ## The mix
 
 `src/mix.js` holds the whole signal flow as data and `src/audio.js` builds the Tone.js graph from it:

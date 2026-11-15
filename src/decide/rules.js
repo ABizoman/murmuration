@@ -54,8 +54,8 @@ export function ruleScores(ctx, library) {
   const song = ctx.structure?.song;
   if (song) {
     level = songLevel(ctx, song, dir, active, last, reasons);
-  } else if (ctx.phrase < ENTRY[role]) {
-    level = { 0: 1 };
+  } else if (!dir.plan && ctx.phrase < ENTRY[role]) {
+    level = { 0: 1 }; // with a form, the intro and verse plans decide who comes in when
     reasons.push({ text: 'waiting for my entry' });
   } else if (dir.drop === role) {
     level = { 0: 5, 1: 1 };
@@ -89,6 +89,7 @@ export function ruleScores(ctx, library) {
     }
     level[0] = ctx.phrase >= ENTRY[role] + 2 && last?.level > 0 && role !== 'chords' ? 0.012 : 0; // a rare breath
   }
+  if (!song && dir.plan?.[role]) level = clampToPlan(level, dir.plan[role], dir.energy, reasons);
 
   // ---- 2. Which pattern ---------------------------------------------------------
   const family = familyOf(ctx.structure); // null in song mode
@@ -106,7 +107,7 @@ export function ruleScores(ctx, library) {
     style[last.style] = Math.max(style[last.style], (others * share) / (1 - share));
     // Groove stability (improvising): the drums and the bass keep their style for the whole
     // section, unless the energy jumps. Only the phrase number and the shared directives decide.
-    if (family && GROOVE_ROLES.has(role) && last.level > 0 && ctx.phrase % SECTION_PHRASES !== 0) {
+    if (family && GROOVE_ROLES.has(role) && last.level > 0 && ctx.phrase % SECTION_PHRASES !== 0 && !dir.isFirstPhrase) {
       const before = ctx.prevDirective?.energy ?? dir.energy;
       if (Math.abs(dir.energy - before) <= GROOVE_ENERGY_JUMP) {
         style = { [last.style]: 1 };
@@ -180,6 +181,29 @@ export function ruleScores(ctx, library) {
   }
 
   return { level, style, register, interaction, voice, reasons };
+}
+
+// The form's plan for this part in this section (form.js) caps the busyness the rules worked out.
+export function clampToPlan(level, plan, energy, reasons = []) {
+  const out = { 0: 0, 1: 0, 2: 0, 3: 0, ...level };
+  if (plan === 'out') {
+    reasons.push({ text: 'section: sitting out' });
+    return { 0: 1 };
+  }
+  if (plan === 'light') {
+    out[2] = out[3] = 0;
+    out[1] = Math.max(out[1], 0.1);
+    out[0] = Math.min(out[0] || 0.02, 0.02);
+    reasons.push({ text: 'section: playing light', when: (d) => d.level <= 1 });
+  } else if (plan === 'normal') {
+    if (energy < 0.6) out[3] = 0;
+    if (!(out[1] + out[2] + out[3] > 0)) out[2] = 1;
+  } else if (plan === 'full') {
+    out[0] = out[1] = 0;
+    if (!(out[2] + out[3] > 0)) out[2] = out[3] = 1;
+    reasons.push({ text: 'section: everyone in', when: (d) => d.level >= 2 });
+  }
+  return Object.fromEntries(Object.entries(out).filter(([, w]) => w > 0));
 }
 
 // Which role may change instrument at this phrase (a section start), or null. Every device must give

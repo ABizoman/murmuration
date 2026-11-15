@@ -13,6 +13,8 @@ import { ROLES } from '../src/loops.js';
 import { simulateBand, byRole, changes, loopOf, voiceOf, fitStats } from './sim.mjs';
 import { STYLE_FAMILIES } from '../src/styles.js';
 import { SECTION_PHRASES } from '../src/decide/rules.js';
+import { transitionsIn } from '../src/transitions.js';
+import { POP_FORM } from '../src/form.js';
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => {
@@ -36,12 +38,13 @@ out(`(loop/voice changes count only consecutive phrases where the part plays in 
 
 const pooled = Object.fromEntries(ROLES.map((r) => [r, { fit: [], loop: [0, 0], voice: [0, 0], terms: {} }]));
 let melodyCont = [];
+const formPooled = { hook: [0, 0], chorusCont: [], fills: [0, 0], crashes: [0, 0], risers: [0, 0], order: true, bad: [] };
 const famPooled = { style: [0, 0], voice: [0, 0], worstBoundary: 0, offStyles: {}, offVoices: {} };
 
 for (const seed of SEEDS) {
   const t0 = performance.now();
   // One random stream per seed (like ?rng=<rng>-<seed>), so the seeds are independent runs.
-  const { structure, parts } = simulateBand({ seed, rng: `${RNG}-${seed}`, phrases: PHRASES });
+  const { structure, parts, form, directive } = simulateBand({ seed, rng: `${RNG}-${seed}`, phrases: PHRASES });
   const ms = performance.now() - t0;
   const series = byRole(parts);
   out();
@@ -60,6 +63,50 @@ for (const seed of SEEDS) {
     if (r === 'melody' && fit.terms.continuity != null) melodyCont.push(fit.terms.continuity);
     const terms = Object.entries(fit.terms).map(([k, v]) => `${k} ${f2(v)}`).join(', ');
     out(`${pad(r, 8)}${lpad(f2(fit.total), 6)}  ${pad(`${lc.changed}/${lc.pairs}`, 14)}${pad(`${vc.changed}/${vc.pairs}`, 15)}${terms}`);
+  }
+  // The form: sections in order, the hook in every chorus, transitions at the seams.
+  if (form) {
+    const at = (p) => directive(p);
+    const names = [];
+    for (let p = 0; p < PHRASES; p++) { const d = at(p); if (d.isFirstPhrase) names.push(d.section); }
+    const part = (r, p) => series[r].find((x) => x.phrase === p)?.part;
+    let hookHit = 0, hookAll = 0, fills = 0, fillAll = 0, crashes = 0, crashAll = 0, risers = 0, riserAll = 0;
+    const cont = [];
+    for (let p = 0; p < PHRASES; p++) {
+      const d = at(p);
+      const mel = part('melody', p);
+      if (d.hook && mel?.notes.length) {
+        hookAll++;
+        if (/the hook/.test(mel.why) || !mel.why) hookHit++;
+        if (!d.isFirstPhrase && mel.fit?.terms?.continuity != null) cont.push(mel.fit.terms.continuity);
+      }
+      const drums = part('drums', p);
+      const tr = drums ? transitionsIn(drums.notes) : { fill: false, crash: false, riser: false };
+      if (d.nextTransitionIn.includes('fill') && drums?.notes.some((n) => n.step < 48)) { fillAll++; if (tr.fill) fills++; else formPooled.bad.push(`${seed}: no fill at phrase ${p}`); }
+      if (d.transitionIn.includes('crash')) { crashAll++; if (tr.crash) crashes++; else formPooled.bad.push(`${seed}: no crash at phrase ${p}`); }
+      if (d.nextTransitionIn.includes('riser')) { riserAll++; if (tr.riser) risers++; else formPooled.bad.push(`${seed}: no riser at phrase ${p}`); }
+      if (!d.isFirstPhrase && tr.crash) formPooled.bad.push(`${seed}: crash mid-section at phrase ${p}`);
+      if (!d.nextTransitionIn.includes('riser') && tr.riser) formPooled.bad.push(`${seed}: riser in the wrong place at phrase ${p}`);
+    }
+    // sections in order: the written form, then round from verse2 again (form.js)
+    const want = [];
+    const loopFrom = POP_FORM.findIndex((x) => x.name === 'verse2');
+    for (let i = 0, p = 0; p < PHRASES; i = i + 1 >= POP_FORM.length ? loopFrom : i + 1) { want.push(POP_FORM[i].name); p += POP_FORM[i].phrases; }
+    formPooled.order &&= JSON.stringify(names) === JSON.stringify(want);
+    // the hook in chorus phrases after the first chorus's first phrase (that one *makes* the hook)
+    const firstHook = [...Array(PHRASES).keys()].find((p) => at(p).hook);
+    let later = 0, laterHit = 0;
+    for (let p = firstHook + 1; p < PHRASES; p++) {
+      const mel = part('melody', p);
+      if (at(p).hook && mel?.notes.length) { later++; if (/the hook/.test(mel.why)) laterHit++; }
+    }
+    formPooled.hook[0] += laterHit; formPooled.hook[1] += later;
+    formPooled.chorusCont.push(...cont);
+    formPooled.fills[0] += fills; formPooled.fills[1] += fillAll;
+    formPooled.crashes[0] += crashes; formPooled.crashes[1] += crashAll;
+    formPooled.risers[0] += risers; formPooled.risers[1] += riserAll;
+    out(`form: ${names.join(' ')}`);
+    out(`  hook in later chorus phrases ${laterHit}/${later} · chorus melody continuity ${f2(cont.length ? cont.reduce((a, b) => a + b, 0) / cont.length : null)} · fills ${fills}/${fillAll} · crashes ${crashes}/${crashAll} · risers ${risers}/${riserAll}`);
   }
   // Style family: how much of what played is on the family's lists, and instrument changes per
   // section boundary (at most one part should change at a time).
@@ -95,6 +142,11 @@ for (const r of ROLES) {
   out(`${pad(r, 8)}${lpad(f2(avg(P.fit)), 6)}  ${pad(`${P.loop[0]}/${P.loop[1]}`, 14)}${pad(`${P.voice[0]}/${P.voice[1]}`, 15)}${terms}`);
 }
 out(`band fit ${f2(avg(ROLES.flatMap((r) => pooled[r].fit)))} · melody continuity ${f2(avg(melodyCont))}`);
+if (formPooled.hook[1] || formPooled.fills[1]) {
+  const c = formPooled.chorusCont;
+  out(`form: sections in order ${formPooled.order ? 'yes' : 'NO'} · hook in later chorus phrases ${pct(formPooled.hook[0] / (formPooled.hook[1] || 1))} · chorus melody continuity ${f2(c.length ? c.reduce((a, b) => a + b, 0) / c.length : null)} · fills ${formPooled.fills[0]}/${formPooled.fills[1]} · crashes ${formPooled.crashes[0]}/${formPooled.crashes[1]} · risers ${formPooled.risers[0]}/${formPooled.risers[1]}`);
+  if (formPooled.bad.length) out(`  problems: ${formPooled.bad.slice(0, 8).join('; ')}`);
+}
 if (famPooled.style[1]) {
   const top = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || 'none';
   out(`family: styles on the list ${pct(famPooled.style[0] / famPooled.style[1])}, instruments ${pct(famPooled.voice[0] / famPooled.voice[1])} of playing phrases · most instrument changes at one section start: ${famPooled.worstBoundary}`);

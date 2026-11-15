@@ -16,4 +16,5 @@ export function registerSong(def) {
 for (const def of [mountainKing, canon, ode]) registerSong(def);
 
 export const songSeed = (id) => `song:${id}`;
-export const songFromSeed = (seed) => (typeof seed === 'string' && seed.startsWith('song:') ? SONGS[seed.slice(5)] || null : null);
+// A trailing "#end" (end after one pass, see seed.js) is not part of the song id.
+export const songFromSeed = (seed) => (typeof seed === 'string' && seed.startsWith('song:') ? SONGS[seed.slice(5).replace(/#end$/, '')] || null : null);

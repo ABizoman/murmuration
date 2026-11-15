@@ -50,7 +50,22 @@ export const PROGRESSIONS = {
 // Swing is shared timing: it must be a plain number in range on every device.
 const clampSwing = (x) => Math.min(MAX_SWING, Math.max(0, Number(x) || 0));
 
-export function structureFromSeed(seed) {
+// "<seed>#end": the same song, but it ends after one pass of the form (form.js) instead of looping.
+// Carried in the seed so every device that joins knows it. The music is the same with or without.
+export const END_SUFFIX = '#end';
+export function parseSeed(seed) {
+  const s = String(seed ?? '');
+  return s.endsWith(END_SUFFIX) ? { base: s.slice(0, -END_SUFFIX.length), end: true } : { base: s, end: false };
+}
+export const withEnd = (seed, end) => (end ? `${parseSeed(seed).base}${END_SUFFIX}` : parseSeed(seed).base);
+
+export function structureFromSeed(fullSeed) {
+  const { base: seed, end } = parseSeed(fullSeed);
+  const s = structureFromBase(seed);
+  return end ? { ...s, end: true } : s;
+}
+
+function structureFromBase(seed) {
   // "song:<id>" plays a fixed song: its own key, tempo and chords, and the agents build it up.
   const song = songFromSeed(seed);
   if (song) {

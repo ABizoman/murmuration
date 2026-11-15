@@ -17,12 +17,13 @@ import { stepMs, phraseStartMs, position, STEPS_PER_PHRASE } from './clock.js';
 import { buildContext } from './decide/context.js';
 import { swingOffset } from './feel.js';
 import { DEFAULT_DIRECTIVE } from './decide/directive.js';
+import { HookBook, HOOK_ROLES } from './hooks.js';
 
 const ORDER = ['drums', 'bass', 'chords', 'melody']; // later agents see what earlier ones just decided
 const KEEP_PHRASES = 5;
 
 export class Engine {
-  constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150, swing = true }) {
+  constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150, swing = true, hooks = null, id = 'local' }) {
     this.agents = Object.fromEntries(agents.map((a) => [a.role, a]));
     this.roles = ORDER.filter((r) => this.agents[r]);
     this.audio = audio; // { play(role, note, whenMs, durMs, voiceId, stepMs) }  whenMs on the same clock as now()
@@ -37,6 +38,9 @@ export class Engine {
     // false (?feel=off): the shared swing is ignored on this device. A/B listening on one device only:
     // with several devices playing together, the device with it off would be out of time.
     this.swing = swing;
+    this.hooks = hooks || new HookBook(); // shared with main.js, which records the swarm's hooks
+    this.id = id;
+    this.ended = false;
     this.myRoles = new Set(this.roles);
     this.doubling = new Set();
     this.phrases = new Map(); // phrase -> { local: { role: part }, sent: Set }
@@ -52,6 +56,7 @@ export class Engine {
     this.phrases.clear();
     this.remote.clear();
     this.planned.clear();
+    this.ended = false;
     for (const a of Object.values(this.agents)) a.reset();
   }
 
@@ -86,6 +91,7 @@ export class Engine {
       structure: this.structure,
       roles: this.roles,
       lookup: (p, r) => this.lookup(p, r),
+      hookEntry: this.hooks.get(role),
       directive: this.getDirective(phrase),
       prevDirective: phrase > 0 ? this.getDirective(phrase - 1) : null,
     });
@@ -117,8 +123,15 @@ export class Engine {
         entry.local[role] = { ...announced, why: `${announced.why} (taken over from ${announced.by})` };
         continue;
       }
-      const part = this.agents[role].compose(this.context(phrase, role), this.getAdvice(phrase, role));
+      const ctx = this.context(phrase, role);
+      const part = this.agents[role].compose(ctx, this.getAdvice(phrase, role));
       entry.local[role] = part;
+      // The first phrase of the first hook section: what this part played becomes its hook.
+      const dir = ctx.directive;
+      if (dir?.hook && dir.isFirstPhrase && HOOK_ROLES.includes(role) && part.loop && !this.hooks.get(role)) {
+        const hook = { role, loopId: part.loop.id, register: part.d.register ?? 0, phrase, by: this.id };
+        if (this.hooks.record(hook)) this.onEvent({ type: 'hook', hook });
+      }
       const startsInMs = phraseStartMs(phrase, this.startMs, this.structure.bpm) - this.now();
       this.onEvent({ type: 'part', phrase, role, part, startsInMs });
     }
@@ -135,13 +148,24 @@ export class Engine {
     const next = cur + 1;
     const untilNext = phraseStartMs(next, this.startMs, bpm) - now;
 
+    // The end of a song that ends (form.js): after the coda's chord has rung for three bars, stop.
+    const here = this.getDirective(cur);
+    if (here?.ended || (here?.end && now - phraseStartMs(cur, this.startMs, bpm) >= 48 * sMs)) {
+      if (!this.ended) {
+        this.ended = true;
+        this.onEvent({ type: 'end', phrase: cur });
+      }
+      return this.stop();
+    }
+    const nextEnded = !!this.getDirective(next)?.ended;
+
     this.ensureParts(cur); // at the start, when joining mid-song, or when a role was just taken over
-    if (!this.planned.has(next) && untilNext <= this.planAheadBars * 16 * sMs) {
+    if (!nextEnded && !this.planned.has(next) && untilNext <= this.planAheadBars * 16 * sMs) {
       this.planned.add(next);
       const roles = this.roles.filter((r) => this.myRoles.has(r) && !this.doubling.has(r));
       if (roles.length) this.onPlan(next, Object.fromEntries(roles.map((r) => [r, this.context(next, r)])), untilNext - this.composeAheadBars * 16 * sMs);
     }
-    if (untilNext <= this.composeAheadBars * 16 * sMs) this.ensureParts(next);
+    if (!nextEnded && untilNext <= this.composeAheadBars * 16 * sMs) this.ensureParts(next);
 
     for (const p of [cur, next]) {
       const entry = this.phrases.get(p);

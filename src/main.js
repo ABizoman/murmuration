@@ -1,5 +1,7 @@
 import { KEYS } from './theory.js';
-import { structureFromSeed, randomFor } from './seed.js';
+import { structureFromSeed, randomFor, parseSeed, withEnd } from './seed.js';
+import { formFromStructure, formDirective, describeSection } from './form.js';
+import { HookBook } from './hooks.js';
 import { localNow, STEPS_PER_PHRASE } from './clock.js';
 import { createLibrary, ROLES } from './loops.js';
 import { Agent, CANDIDATES, CANDIDATES_LITE } from './agent.js';
@@ -68,6 +70,10 @@ for (const pair of (params.get('voice') || '').split(',').filter(Boolean)) {
 }
 let realAudio = null;
 let tickTimer = null;
+// The form (improvising: the upbeat-pop form; songs: none until step E) and the shared hooks.
+let form = null;
+let formSeed = null; // the seed the hooks belong to
+const hookBook = new HookBook();
 
 const swarm = new Swarm({
   localNow,
@@ -87,14 +93,18 @@ const swarm = new Swarm({
     message: (body, origin) => {
       if (body.type === 'proposal') director.onProposal(body);
       else if (body.type === 'endorse') director.onEndorse(body, origin);
+      else if (body.type === 'hook') onHook(body, origin);
     },
-    welcome: (b) => b.direction && director.adoptFromPeer(b.direction),
+    welcome: (b) => {
+      if (b.direction) director.adoptFromPeer(b.direction);
+      for (const h of Array.isArray(b.hooks) ? b.hooks.slice(0, 8) : []) onHook({ ...h, seed: b.hooksSeed }, h.by);
+    },
     part: onRemotePart,
     change: renderSwarm,
   },
   welcomeExtra: () => {
     const pos = engine.position();
-    return { direction: pos ? director.current(Math.max(0, pos.phrase) + 1) : null };
+    return { direction: pos ? director.current(Math.max(0, pos.phrase) + 1) : null, hooks: hookBook.all(), hooksSeed: formSeed };
   },
 });
 
@@ -142,6 +152,12 @@ function syncDoubling() {
 function describeForDirector(phrase) {
   const section = sectionOf(phrase) + 1;
   const lines = [`Song: ${$('structure').textContent}. You are setting the direction for section ${section + 1} (phrases ${section * SECTION_PHRASES + 1}-${(section + 1) * SECTION_PHRASES}).`];
+  if (form) {
+    const first = section * SECTION_PHRASES;
+    const parts = [];
+    for (let p = first; p < first + SECTION_PHRASES; p++) parts.push(`phrase ${p + 1}: ${describeSection(form, p)}`);
+    lines.push(`The song has a pop form that sets the energy; your direction nudges it. Coming up: ${parts.join('; ')}.`);
+  }
   lines.push(`Current direction: ${describeDirective(director.directiveFor(phrase))}.`);
   for (let p = Math.max(0, phrase - 3); p < phrase; p++) {
     lines.push(`Phrase ${p + 1}:`);
@@ -164,8 +180,11 @@ const engine = new Engine({
     director.maybePropose(phrase, () => describeForDirector(phrase));
   },
   getAdvice: (phrase, role) => jev.advice(phrase, role),
-  getDirective: (phrase) => director.directiveFor(phrase),
+  // The form leads and the director nudges (form.js); with no form, the director alone.
+  getDirective: (phrase) => (form ? formDirective(form, phrase, director.directiveFor(phrase)) : director.directiveFor(phrase)),
   swing: FEEL,
+  hooks: hookBook,
+  id: swarm.id,
 });
 engine.myRoles = new Set();
 
@@ -173,10 +192,10 @@ engine.myRoles = new Set();
 
 function showStructure(seed) {
   const s = structureFromSeed(seed);
-  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}`;
+  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}${s.end ? ' · ends after one pass' : ''}`;
   return s;
 }
-$('seed').addEventListener('input', () => !swarm.song && showStructure($('seed').value));
+$('seed').addEventListener('input', () => !swarm.song && showStructure(chosenSeed()));
 
 // Song picker: "improvise" uses the seed; a song fixes key, tempo, chords and parts.
 $('song').innerHTML = `<option value="">Improvise (from the seed)</option>` +
@@ -184,17 +203,25 @@ $('song').innerHTML = `<option value="">Improvise (from the seed)</option>` +
 $('song').addEventListener('change', () => {
   if (swarm.song) return;
   $('seed').disabled = !!$('song').value;
-  showStructure($('song').value ? songSeed($('song').value) : $('seed').value);
+  showStructure(chosenSeed());
 });
 function showSeed(seed) {
-  const song = songFromSeed(seed);
+  const { base, end } = parseSeed(seed);
+  const song = songFromSeed(base);
   $('song').value = song ? song.id : '';
-  if (!song) $('seed').value = seed;
+  if (!song) $('seed').value = base;
+  if ($('endAfterPass')) $('endAfterPass').checked = end;
 }
+// What Start plays: the picked song or the seed, with "#end" if "End after one pass" is ticked.
+const chosenSeed = () => withEnd($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack', !!$('endAfterPass')?.checked);
+$('endAfterPass')?.addEventListener('change', () => !swarm.song && showStructure(chosenSeed()));
 showStructure($('seed').value);
 
 function playSong(song) {
   const structure = showStructure(song.seed);
+  form = formFromStructure(structure);
+  if (formSeed !== song.seed) hookBook.clear(); // a different song: its hooks are not ours
+  formSeed = song.seed;
   showSeed(song.seed);
   const lib = libraryFor(structure);
   for (const a of agents) {
@@ -225,21 +252,23 @@ function tick() {
   engine.tick();
 }
 
+function leaveSong(why = 'left the song (still connected to the swarm)') {
+  swarm.leave();
+  engine.stop();
+  clearInterval(tickTimer);
+  log(why);
+  updateButton();
+}
+
 $('start').addEventListener('click', async () => {
-  if (swarm.playing) {
-    swarm.leave();
-    engine.stop();
-    clearInterval(tickTimer);
-    log('left the song (still connected to the swarm)');
-    return updateButton();
-  }
+  if (swarm.playing) return leaveSong();
   if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE }); // needs this click
   try { await navigator.wakeLock?.request('screen'); } catch {}
   if (swarm.song) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
     swarm.join();
   } else {
-    swarm.startSong($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack');
+    swarm.startSong(chosenSeed());
     log(`<b>started a new song</b> "${swarm.song.seed}"`);
   }
   playSong(swarm.song);
@@ -274,7 +303,7 @@ function updateButton() {
 // --- Listening tools: record a clip, read the master meters -------------------------
 
 // The seed of what is playing (or about to), for the clip's file name.
-const currentSeed = () => swarm.song?.seed ?? ($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack');
+const currentSeed = () => parseSeed(swarm.song?.seed ?? chosenSeed()).base;
 
 const RECORD_SECONDS = 60;
 
@@ -317,12 +346,18 @@ setInterval(() => {
 // --- Parts going out and coming in ------------------------------------------------
 
 function onEvent(ev) {
+  if (ev.type === 'hook') {
+    swarm.publish({ type: 'hook', seed: formSeed, ...ev.hook });
+    return log(`the <b>${ev.hook.role}</b> hook is set (phrase ${ev.hook.phrase + 1})`);
+  }
+  if (ev.type === 'end') return setTimeout(() => swarm.playing && leaveSong('<b>the song ended</b>'), 0);
   if (ev.type !== 'part') return;
   ev.part.by = swarm.id;
   swarm.publishPart(ev.phrase, ev.role, ev.part);
   const reasons = ev.part.notes.length && ev.part.reasons?.length ? ` — ${ev.part.reasons.join('; ')}` : '';
   log(`phrase ${ev.phrase + 1} <span style="color:${COLORS[ev.role]}">${ev.role}</span>: ${esc(ev.part.why)} [${esc(ev.part.source)}]${esc(reasons)}`);
   renderAgents();
+  renderDirection();
 }
 
 // Notes from another device: keep the fields we use (including the Phase 1 groove fields `nudge`
@@ -341,6 +376,12 @@ function onRemotePart(body, origin) {
   });
 }
 
+// A hook another device set: keep it if it is for this song (earliest wins, hooks.js).
+function onHook(body, origin) {
+  if (!body || body.seed !== formSeed) return;
+  hookBook.record({ role: body.role, loopId: body.loopId, register: Number(body.register) || 0, phrase: body.phrase, by: origin ?? body.by });
+}
+
 // --- Agent cards --------------------------------------------------------------------
 
 function detail(part) {
@@ -357,7 +398,9 @@ function renderDirection() {
   const cur = pos ? director.current(Math.max(0, pos.phrase)) : null;
   const d = cur?.directive || DEFAULT_DIRECTIVE;
   const j = jev.stats;
+  const sec = form && pos ? describeSection(form, Math.max(0, pos.phrase)) : '';
   $('direction').innerHTML =
+    (sec ? `<div>song form: <b>${esc(sec)}</b></div>` : '') +
     `<div><b>${esc(describeDirective(d))}</b>${d.note ? ` — “${esc(d.note)}”` : ''}</div>` +
     `<div class="why">${cur ? `section ${cur.section + 1}, proposed by ${esc(cur.by)} (${esc(cur.source)})${cur.votes ? `, ${cur.votes} votes` : ''}` : 'no direction adopted yet: default'} · director here: ${esc(director.status)}</div>` +
     `<div class="why">Jev: ${esc(j.state)}${j.source ? ` (${esc(j.source)})` : ''} · answered in time ${j.inTime}/${j.asked}${j.late ? `, too late ${j.late}` : ''}${j.failed ? `, failed ${j.failed}` : ''}${j.lastMs != null ? ` · last ${j.lastMs} ms` : ''}</div>`;

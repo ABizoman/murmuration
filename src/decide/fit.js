@@ -241,20 +241,33 @@ const contour = (notes) => {
 // phrase used to score 0.17 here, which made the drums swap loop every other phrase).
 export const CONTINUITY_TARGET = { drums: [0.8, 1], bass: [0.5, 0.9], chords: [0.5, 0.9], melody: [0.4, 0.75] };
 
-// Similar to my own last phrase, but (for the melody) not identical: half rhythm, half melodic shape.
-function continuity(notes, ctx) {
-  const last = ctx.last || ctx.history?.[0] || null;
-  if (!notes.length || !last?.notes?.length) return null;
-  const rhythmSim = jaccard(onsets(notes), onsets(last.notes)) ?? 0;
-  const a = contour(notes), b = contour(last.notes);
-  let sim = rhythmSim;
-  if (a.length && b.length) {
-    let same = 0;
-    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) same++;
-    sim = 0.5 * rhythmSim + 0.5 * (same / Math.max(a.length, b.length));
-  }
-  return inRange(ctx.hook ? [0.9, 1] : CONTINUITY_TARGET[ctx.role] || CONTINUITY_TARGET.melody, sim);
+// How alike two parts are: half rhythm, half melodic shape (just rhythm for drums).
+export function similarity(notes, ref) {
+  const rhythmSim = jaccard(onsets(notes), onsets(ref)) ?? 0;
+  const a = contour(notes), b = contour(ref);
+  if (!a.length || !b.length) return rhythmSim;
+  let same = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) same++;
+  return 0.5 * rhythmSim + 0.5 * (same / Math.max(a.length, b.length));
 }
+
+// Similar to my own last phrase, but (for the melody) not identical. In a verse, with the chorus
+// hook known (ctx.hookRef: the hook rendered over this phrase), the melody should also be related
+// to the hook without copying it, so the verse leads somewhere.
+function continuity(notes, ctx) {
+  if (!notes.length) return null;
+  // The first phrase of a form section (form.js) is meant to change: it is not judged against the
+  // last phrase. (A hook section's first phrase plays the hook, which is its own reference.)
+  if (ctx.directive?.isFirstPhrase && ctx.directive.section) return null;
+  const last = ctx.last || ctx.history?.[0] || null;
+  const own = last?.notes?.length ? inRange(ctx.hook ? [0.9, 1] : CONTINUITY_TARGET[ctx.role] || CONTINUITY_TARGET.melody, similarity(notes, last.notes)) : null;
+  if (!ctx.hook && ctx.hookRef?.length) {
+    const toHook = inRange(HOOK_RELATION, similarity(notes, ctx.hookRef));
+    return own == null ? toHook : 0.5 * own + 0.5 * toHook;
+  }
+  return own;
+}
+export const HOOK_RELATION = [0.4, 0.7]; // a verse melody vs the chorus hook
 
 // Drummer's job: lock the kick to the bass, keep a backbeat once there is any weight, and save
 // the fills for the end of the phrase.

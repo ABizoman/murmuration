@@ -113,6 +113,7 @@ export function createLibrary({ packs = [], builtins = true } = {}) {
       loops.push(loop);
     },
     styles: (role) => [...new Set(loops.filter((l) => l.role === role).map((l) => l.style))],
+    get: (id) => loops.find((l) => l.id === id) || null, // the exact loop, for hooks
     // Average energy of a style's loops (pack loops carry one), or null.
     styleEnergy(role, style) {
       const e = byStyle(role, style).map((l) => l.energy).filter((x) => typeof x === 'number');
