@@ -51,7 +51,8 @@ test('seed: "#end" is carried in the seed and changes nothing else', () => {
   assert.equal(withEnd('durhack', true), 'durhack#end');
   assert.equal(withEnd('durhack#end', false), 'durhack');
   const a = structureFromSeed('durhack'), b = structureFromSeed('durhack#end');
-  assert.deepEqual({ ...b, end: undefined }, { ...a, end: undefined });
+  assert.deepEqual({ ...b, end: undefined, form: { ...b.form, end: false } }, { ...a, end: undefined });
+  assert.equal(b.form.end, true);
   assert.equal(b.end, true);
   assert.equal(a.end, undefined);
   assert.equal(songFromSeed('song:ode-to-joy#end')?.id, 'ode-to-joy');
@@ -222,4 +223,27 @@ test('two devices agree on hooks and transitions, and the hook survives a takeov
   assert.equal(melody(11).loop.id, A.hooks.get('melody').loopId);
   const drums12 = log.find((x) => x.id === 'b' && x.role === 'drums' && x.phrase === 11)?.part;
   assert.ok(transitionsIn(drums12.notes).crash, 'and the final chorus still starts with a crash');
+});
+
+test('improvising: every section has its own chords; the chorus keeps the seed progression', async () => {
+  const { chordAt } = await import('../src/render.js');
+  let differ = 0;
+  for (let i = 0; i < 60; i++) {
+    const s = structureFromSeed(`sec${i}`);
+    const p = (n) => s.sections[n].progression.join(' ');
+    assert.equal(p('chorus'), s.progression.join(' '));
+    assert.equal(p('finalChorus'), p('chorus'));
+    assert.equal(p('verse2'), p('verse'));
+    assert.notEqual(p('verse'), p('chorus'), `sec${i}: the verse has other chords`);
+    if (p('pre') !== p('chorus') && p('breakdown') !== p('chorus')) differ++;
+    // chordAt follows the section: the verse's first chord at phrase 1, the chorus's at phrase 4
+    const first = (name) => s.sections[name].progression[0];
+    const f = formFromStructure(s);
+    const starts = (name) => f.starts[f.sections.findIndex((x) => x.name === name)];
+    assert.deepEqual(chordAt(s, starts('verse'), 0), chordAt({ ...s, sections: undefined, form: undefined, progression: [first('verse')] }, 0, 0));
+    assert.deepEqual(chordAt(s, starts('chorus'), 0), chordAt({ ...s, sections: undefined, form: undefined, progression: [first('chorus')] }, 0, 0));
+  }
+  assert.equal(differ, 60);
+  // the same seed always gives the same chords
+  assert.deepEqual(structureFromSeed('sec1').sections, structureFromSeed('sec1').sections);
 });

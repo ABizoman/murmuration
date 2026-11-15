@@ -1,0 +1,75 @@
+Murmuration music QA · 40 phrases · rng "qa-<seed>" · seeds durhack, pop1, pop2, pop3, pop4
+four devices, one part each (60 ms gossip) · horizons staggered (drums + chords 2, bass 1.5, melody 1 bars)
+(loop/voice changes count only consecutive phrases where the part plays in both)
+
+== durhack: Bb minor · 119 bpm · i iv v i (589 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.98  16/31         2/39           rhythm 0.96, drums 1.00, continuity 0.93
+bass      0.95  6/22          1/22           harmony 1.00, bassRoot 1.00, clash 0.99, register 1.00, rhythm 0.98, shape 0.60, continuity 0.93
+chords    0.91  23/39         2/39           rhythm 0.95, clash 0.84, register 1.00, continuity 0.80
+melody    0.95  14/30         2/30           harmony 1.00, clash 1.00, register 1.00, rhythm 0.96, shape 0.72, continuity 0.80
+form: intro verse pre chorus verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2
+  hook in later chorus phrases 17/17 · chorus melody continuity 0.89 · fills 12/12 · crashes 14/14 · risers 10/10
+family dance: styles on the list 100%, instruments 100% · instrument changes per section start: 0 1 1 1 1 1 1 1 0
+instruments: drums kit-house/kit-linn · bass bass-electric/synth-bass · chords keys-epiano/synth-stab/synth-keys · melody synth-lead/synth-pluck
+
+== pop1: B minor · 122 bpm · i VI VII i · swing 0.012 (456 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.93  17/31         2/39           rhythm 0.94, drums 0.92, continuity 0.93
+bass      0.93  6/22          2/22           harmony 1.00, bassRoot 1.00, clash 0.95, register 0.97, rhythm 0.95, shape 0.57, continuity 0.89
+chords    0.90  24/39         2/39           rhythm 0.98, clash 0.79, register 1.00, continuity 0.78
+melody    0.98  10/30         1/30           harmony 1.00, clash 1.00, register 1.00, rhythm 0.95, shape 0.97, continuity 0.83
+form: intro verse pre chorus verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2
+  hook in later chorus phrases 17/17 · chorus melody continuity 1.00 · fills 12/12 · crashes 14/14 · risers 10/10
+family dance: styles on the list 100%, instruments 100% · instrument changes per section start: 0 1 0 1 1 1 1 1 1
+instruments: drums kit-linn/kit-house · bass bass-electric/synth-bass · chords keys-epiano/synth-pad · melody synth-riff/synth-pluck
+
+== pop2: F# major · 123 bpm · I vi IV V · swing 0.009 (324 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.98  16/31         2/39           rhythm 0.96, drums 1.00, continuity 0.93
+bass      0.95  6/22          1/22           harmony 1.00, bassRoot 1.00, clash 1.00, register 1.00, rhythm 0.98, shape 0.66, continuity 0.86
+chords    0.87  23/39         1/39           rhythm 0.98, clash 0.71, register 1.00, continuity 0.84
+melody    0.92  11/30         2/30           harmony 1.00, clash 0.97, register 1.00, rhythm 0.96, shape 0.61, continuity 0.70
+form: intro verse pre chorus verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2
+  hook in later chorus phrases 17/17 · chorus melody continuity 0.89 · fills 12/12 · crashes 14/14 · risers 10/10
+family dance: styles on the list 100%, instruments 100% · instrument changes per section start: 0 1 1 1 1 0 1 1 0
+instruments: drums kit-8/kit-house/kit-linn · bass bass-electric/synth-bass · chords keys-epiano/synth-keys · melody synth-riff/synth-pluck/synth-lead
+
+== pop3: F minor · 120 bpm · i VII VI VII · swing 0.001 (329 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.94  15/31         2/39           rhythm 0.90, drums 1.00, continuity 0.95
+bass      0.92  2/22          1/22           harmony 1.00, bassRoot 1.00, clash 0.99, register 0.90, rhythm 0.77, shape 0.77, continuity 0.78
+chords    0.88  23/39         2/39           rhythm 0.95, clash 0.78, register 0.94, continuity 0.92
+melody    0.97  10/30         2/30           harmony 1.00, clash 0.99, register 1.00, rhythm 0.93, shape 0.96, continuity 0.77
+form: intro verse pre chorus verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2
+  hook in later chorus phrases 17/17 · chorus melody continuity 0.89 · fills 12/12 · crashes 14/14 · risers 10/10
+family dance: styles on the list 100%, instruments 100% · instrument changes per section start: 0 1 1 1 1 1 1 1 0
+instruments: drums kit-8/kit-house/kit-linn · bass bass-electric/synth-bass · chords keys-epiano/synth-keys · melody synth-pluck/synth-riff/synth-lead
+
+== pop4: F# minor · 122 bpm · i VII VI VII · swing 0.005 (335 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.96  15/31         2/39           rhythm 0.93, drums 1.00, continuity 0.98
+bass      0.91  8/22          2/22           harmony 1.00, bassRoot 1.00, clash 0.95, register 1.00, rhythm 0.88, shape 0.58, continuity 0.61
+chords    0.88  24/39         2/39           rhythm 0.94, clash 0.80, register 0.97, continuity 0.82
+melody    0.96  12/30         2/30           harmony 1.00, clash 1.00, register 1.00, rhythm 0.93, shape 0.83, continuity 0.84
+form: intro verse pre chorus verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2 chorus breakdown finalChorus outro verse2
+  hook in later chorus phrases 17/17 · chorus melody continuity 1.00 · fills 12/12 · crashes 14/14 · risers 10/10
+family dance: styles on the list 100%, instruments 100% · instrument changes per section start: 0 1 1 1 1 1 1 1 1
+instruments: drums kit-8/kit-house/kit-linn · bass synth-bass/bass-electric · chords synth-keys/synth-stab/keys-epiano · melody melody-epiano/synth-pluck/synth-lead
+
+== all seeds
+role       fit  loop changes  voice changes  terms
+drums     0.96  79/155        10/195         rhythm 0.94, drums 0.98, continuity 0.95
+bass      0.93  28/110        7/110          harmony 1.00, bassRoot 1.00, clash 0.98, register 0.97, rhythm 0.91, shape 0.64, continuity 0.81
+chords    0.89  117/195       9/195          rhythm 0.96, clash 0.78, register 0.98, continuity 0.83
+melody    0.96  57/150        9/150          harmony 1.00, clash 0.99, register 1.00, rhythm 0.95, shape 0.82, continuity 0.79
+band fit 0.93 · melody continuity 0.79
+ensemble (each part scored afterwards against what the others actually played that phrase):
+  drums     0.92  rhythm 0.91, drums 0.92, continuity 0.94 · heard same-phrase: bass 0%, chords 0%, melody 0%
+  bass      0.94  harmony 1.00, bassRoot 1.00, clash 1.00, register 0.97, rhythm 0.92, shape 0.64, continuity 0.81 · heard same-phrase: drums 98%, chords 98%, melody 0%
+  chords    0.97  rhythm 0.97, clash 0.99, register 0.98, continuity 0.83 · heard same-phrase: drums 0%, bass 0%, melody 0%
+  melody    0.96  harmony 1.00, clash 0.99, register 1.00, rhythm 0.95, shape 0.82, continuity 0.92 · heard same-phrase: drums 98%, bass 98%, chords 98%
+  band 0.95
+form: sections in order yes · hook in later chorus phrases 100% · chorus melody continuity 0.93 · fills 60/60 · crashes 70/70 · risers 50/50
+family: styles on the list 100%, instruments 100% of playing phrases · most instrument changes at one section start: 1
+  off-list styles: none · off-list instruments: none

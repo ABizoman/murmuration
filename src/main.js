@@ -204,7 +204,11 @@ engine.myRoles = new Set();
 
 function showStructure(seed) {
   const s = structureFromSeed(seed);
-  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}${s.end ? ' · ends after one pass' : ''}`;
+  // Improvising: the verse and chorus chords (each section has its own, seed.js).
+  const chords = s.sections && !s.song
+    ? `verse ${s.sections.verse.progression.join(' – ')} · chorus ${s.sections.chorus.progression.join(' – ')}`
+    : s.progression.join(' – ');
+  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${chords}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}${s.end ? ' · ends after one pass' : ''}`;
   return s;
 }
 $('seed').addEventListener('input', () => !swarm.song && showStructure(chosenSeed()));

@@ -760,3 +760,18 @@ plain, the beat is wrong, and it is too happy or bright. So:
 ### Needs ears
 - [ ] `?demo=murmur`: closer? Which of beat / bass / riff / sounds still feels off?
 - [ ] The pump depth (−10 / −7 dB): too much "breathing"?
+
+## Round 2, step 1 — different chords per section (improvising)
+
+"It feels like it is just in a loop": one progression ran under the whole improvised song.
+- `seed.js` `withSectionChords`: the improvised structure now carries the pop form and a
+  progression per section, from its own random stream (`seededRandom(seed, 'sections')`, so the key,
+  tempo, mode and the main progression of every seed are unchanged). The chorus (and intro, outro,
+  final chorus) keep the seed's progression; the verse (and verse2) get another from the style's
+  list; the pre-chorus climbs (`SECTION_PROGRESSIONS.pre`, ending on V or VII); the breakdown
+  calms down (`SECTION_PROGRESSIONS.breakdown`). `chordAt` already followed sections.
+- Hooks still apply when improvising (the "nothing to pin" rule is for written songs only), and 8-bar
+  loops now start with their section.
+- The Menu shows "verse … · chorus …".
+- Tests **149**; `npm run qa` (`docs/qa/H1-section-chords.txt`): ensemble band fit 0.95 (unchanged),
+  sections, hooks and transitions all in place. Headless Chrome: no page errors.

@@ -65,6 +65,21 @@ STYLE_FAMILIES.dance = {
   unlistedVoices: 0.004, // a trumpet in a dance track: almost never
 };
 
+// Chords per section when improvising (step "1" after E). The chorus keeps the progression the seed
+// drew (it is the song's main one; the intro and outro use it too); the verse gets another one from
+// the style's list; the pre-chorus climbs towards the chorus; the breakdown calms down. A style can
+// replace any list with its own `sectionProgressions`.
+export const SECTION_PROGRESSIONS = {
+  pre: {
+    major: [['IV', 'V', 'IV', 'V'], ['ii', 'IV', 'V', 'V'], ['IV', 'vi', 'IV', 'V'], ['vi', 'IV', 'V', 'V']],
+    minor: [['iv', 'VI', 'VII', 'VII'], ['VI', 'VII', 'VI', 'VII'], ['iv', 'v', 'VI', 'VII']],
+  },
+  breakdown: {
+    major: [['vi', 'IV', 'vi', 'IV'], ['IV', 'IV', 'vi', 'V'], ['vi', 'V', 'IV', 'IV']],
+    minor: [['VI', 'VI', 'i', 'i'], ['iv', 'iv', 'i', 'i'], ['VI', 'VII', 'i', 'i']],
+  },
+};
+
 // Improvising uses this family unless the seed asks for another ("<seed>#pop", see seed.js).
 export const DEFAULT_FAMILY = 'dance';
 export const FAMILY_TAGS = { dance: 'dance', pop: 'pop-upbeat' };

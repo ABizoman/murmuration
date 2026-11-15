@@ -5,8 +5,8 @@ import { KEYS } from './theory.js';
 import { PACK_PROGRESSIONS } from './packs.js';
 import { songFromSeed } from './songs/index.js';
 import { MAX_SWING } from './clock.js';
-import { STYLE_FAMILIES, DEFAULT_FAMILY, FAMILY_TAGS } from './styles.js';
-import { songForm } from './form.js';
+import { STYLE_FAMILIES, DEFAULT_FAMILY, FAMILY_TAGS, SECTION_PROGRESSIONS } from './styles.js';
+import { songForm, formFromStructure } from './form.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -67,8 +67,30 @@ export const withStyle = (seed, style) => joinSeed({ ...parseSeed(seed), style: 
 
 export function structureFromSeed(fullSeed) {
   const { base: seed, end, style } = parseSeed(fullSeed);
-  const s = structureFromBase(seed, FAMILY_TAGS[style] ?? DEFAULT_FAMILY);
-  return end ? { ...s, end: true } : s;
+  let s = structureFromBase(seed, FAMILY_TAGS[style] ?? DEFAULT_FAMILY);
+  if (end) s = { ...s, end: true, ...(s.form ? { form: { ...s.form, end: true } } : {}) };
+  return s;
+}
+
+// Improvising: each section of the pop form gets its own chords (render.js chordAt reads them), so
+// the verse, the pre-chorus, the chorus and the breakdown sound like different places. Drawn from
+// their own random stream, so nothing else about the seed changes.
+function withSectionChords(s) {
+  const r = seededRandom(s.seed, 'sections');
+  const fam = STYLE_FAMILIES[s.family] || {};
+  const lists = { ...SECTION_PROGRESSIONS, ...(fam.sectionProgressions || {}) };
+  const pick = (list, avoid) => {
+    const options = (list || []).filter((p) => p.join() !== avoid?.join());
+    return options.length ? options[Math.floor(r() * options.length)] : avoid;
+  };
+  const chorus = s.progression;
+  const own = fam.progressions?.[s.mode] || PROGRESSIONS[s.mode];
+  const verse = pick(own, chorus);
+  const pre = pick(lists.pre?.[s.mode], chorus);
+  const breakdown = pick(lists.breakdown?.[s.mode], chorus);
+  const sections = { intro: chorus, verse, pre, chorus, verse2: verse, breakdown, finalChorus: chorus, outro: chorus };
+  const form = formFromStructure({ seed: s.seed });
+  return { ...s, form, sections: Object.fromEntries(Object.entries(sections).map(([n, p]) => [n, { progression: p }])) };
 }
 
 function structureFromBase(seed, familyName) {
@@ -96,7 +118,7 @@ function structureFromBase(seed, familyName) {
   // Swing is drawn last on purpose: every seed keeps the key, tempo and progression it had before.
   const swing = clampSwing(Math.round(r() * 60) / 1000); // 0 to 0.06 of a 16th: upbeat pop, not jazz
   const plain = { seed, key, mode, bpm, progression: pick.chords, swing, mood: pick.mood };
-  return withFamily(plain, r, familyName);
+  return withSectionChords(withFamily(plain, r, familyName));
 }
 
 // The style family (styles.js) re-draws the mode, tempo, progression and swing from its own ranges.
