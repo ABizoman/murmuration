@@ -17,7 +17,7 @@ import { simulateBand, byRole } from '../tools/sim.mjs';
 
 const FAM = STYLE_FAMILIES['pop-upbeat'];
 const packLib = createLibrary({ packs: PACK_LOOPS });
-const popStructure = structureFromSeed('durhack');
+const popStructure = structureFromSeed('durhack#pop');
 const ctxFor = (role, extra = {}) => ({ role, phrase: 0, structure: popStructure, peers: {}, before: {}, last: null, history: [], directive: null, ...extra });
 
 // ---- voices and patches -------------------------------------------------------------
@@ -79,14 +79,14 @@ test('patches: the pad is the stereo one (chorus), polyphony is capped, the lead
   const pad = played(audio, 'chords', { midis: [60, 64, 67] }, 'synth-pad')[0].node;
   assert.equal(pad.opts.maxPolyphony, 12);
   assert.equal(pad.opts.oscillator.type, 'fatsawtooth');
-  assert.ok(routes(pad).every((p) => /Filter\(3000 lowpass\) -> Chorus/.test(p)));
+  assert.ok(routes(pad).every((p) => /Filter\(1600 lowpass\) -> Chorus/.test(p)));
   const chorus = nodes.find((n) => n.kind === 'Chorus');
   assert.ok(chorus.started != null, 'a Tone.Chorus does nothing until started');
   assert.equal(chorus.opts.wet, 0.4);
   assert.equal(played(audio, 'chords', { midis: [60, 64] }, 'synth-keys')[0].node.voice, 'FMSynth');
   const pluck = played(audio, 'melody', { midi: 76 }, 'synth-pluck')[0].node;
   assert.equal(pluck.opts.maxPolyphony, 6);
-  assert.ok(routes(pluck).every((p) => p.includes('Filter(4500 lowpass)')));
+  assert.ok(routes(pluck).every((p) => p.includes('Filter(2200 lowpass)')));
   played(audio, 'melody', { midi: 76 }, 'synth-lead', 800);
   const vib = nodes.find((n) => n.kind === 'Vibrato');
   const [cancel, set, ramp] = vib.depth.events;
@@ -158,7 +158,7 @@ test('crash and riser: placed exactly, survive gossip', () => {
 // ---- the style family -----------------------------------------------------------------
 
 test('family: the seed gives upbeat-pop tempo, mostly major, the family recorded; songs have none', () => {
-  const all = Array.from({ length: 400 }, (_, i) => structureFromSeed(`f${i}`));
+  const all = Array.from({ length: 400 }, (_, i) => structureFromSeed(`f${i}#pop`));
   for (const s of all) {
     assert.equal(s.family, 'pop-upbeat');
     assert.ok(s.bpm >= 104 && s.bpm <= 124, `bpm ${s.bpm}`);
@@ -224,7 +224,7 @@ test('voiceTurn: only at a section start, only after two sections, longest first
 
 test('stability: instruments change only at section starts, one part at a time, two sections apart', () => {
   for (const seed of ['durhack', 'pop1', 'pop2']) {
-    const series = byRole(simulateBand({ seed, rng: `stab-${seed}`, phrases: 48 }).parts);
+    const series = byRole(simulateBand({ seed: `${seed}#pop`, rng: `stab-${seed}`, phrases: 48 }).parts);
     const voiceAt = (r, p) => series[r].find((x) => x.phrase === p)?.part.d.voice;
     let total = 0;
     for (let p = 1; p < 48; p++) {
@@ -264,4 +264,33 @@ test('?voice=: pinning an instrument keeps everything else automatic', () => {
     assert.equal(part.d.voice, 'synth-pad');
   }
   assert.equal(agent.auto, true);
+});
+
+test('dance: the default when improvising; minor, 118-124 bpm, house bass, short riffs that may repeat', async () => {
+  const { withStyle } = await import('../src/seed.js');
+  const D = STYLE_FAMILIES.dance;
+  const all = Array.from({ length: 300 }, (_, i) => structureFromSeed(`d${i}`));
+  for (const s of all) {
+    assert.equal(s.family, 'dance');
+    assert.ok(s.bpm >= 118 && s.bpm <= 124, `bpm ${s.bpm}`);
+  }
+  const minor = all.filter((s) => s.mode === 'minor').length / all.length;
+  assert.ok(minor > 0.75, `minor share ${minor}`);
+  assert.equal(structureFromSeed('d1#pop').family, 'pop-upbeat');
+  assert.equal(structureFromSeed('d1#dance').family, 'dance');
+  assert.equal(structureFromSeed('d1').key, structureFromSeed('d1#pop').key, 'the key does not depend on the style');
+  assert.equal(withStyle('d1', 'pop'), 'd1#pop');
+  assert.equal(withStyle('d1#pop#end', 'dance'), 'd1#end');
+  // the new loops are there, and only chord notes in the riffs
+  const lib = createLibrary();
+  assert.ok(lib.styles('bass').includes('offbeat') && lib.styles('melody').includes('riff'));
+  for (const l of lib.loops.filter((x) => x.style === 'riff')) for (const e of l.events) assert.ok([0, 2, 4, 7].includes(e.deg), `${l.id} ${e.deg}`);
+  for (const l of lib.loops.filter((x) => x.style === 'offbeat')) for (const e of l.events) assert.equal(e.step % 4, 2, 'on the off-beats');
+  // a run: dance styles and instruments, a melody that never goes busy
+  const { parts } = simulateBand({ seed: 'dancerun', rng: 'dance', phrases: 24 });
+  const playing = parts.filter((x) => x.part.notes.length && !x.part.d.style.startsWith('end'));
+  const on = playing.filter((x) => D.styles[x.role][x.part.d.style] != null).length / playing.length;
+  assert.ok(on > 0.95, `on-style ${on}`);
+  assert.ok(playing.filter((x) => x.role === 'melody').every((x) => x.part.d.level <= 2), 'the melody stays simple');
+  assert.ok(playing.some((x) => x.role === 'bass' && x.part.d.style === 'offbeat'), 'the house bass is used');
 });

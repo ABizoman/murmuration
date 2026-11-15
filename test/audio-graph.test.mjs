@@ -26,7 +26,7 @@ test('graph: a kick runs through the drum bus compressor, the glue and the limit
   t.after(() => audio.dispose());
   const [hit] = played(audio, 'drums', note({ drum: 'kick' }));
   const paths = routes(hit.node);
-  assert.ok(paths.some((p) => /^MembraneSynth -> Panner\(0\) -> Gain\(1\) -> Compressor\(r4\) -> EQ3\(mid 0, high 1.5\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination$/.test(p)),
+  assert.ok(paths.some((p) => /^MembraneSynth -> Panner\(0\) -> Gain\(1\) -> Compressor\(r4\) -> EQ3\(mid 0, high 0\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination$/.test(p)),
     `kick routes:\n${paths.join('\n')}`);
   assert.ok(!paths.some((p) => p.includes('Filter')), 'the kick keeps its bottom end');
   assert.ok(paths.some((p) => p.includes('Reverb(0.9)')), 'a little room');
@@ -51,7 +51,7 @@ test('graph: the bass is highpassed, cut in the mud, then ducked BEFORE its comp
   t.after(() => audio.dispose());
   const paths = routes(played(audio, 'bass', note({ midi: 40 }))[0].node);
   // Two gains in a row = the bus input and the duck gain; the compressor must come after both.
-  assert.ok(paths.some((p) => /Filter\(35 highpass\) -> EQ3\(mid -2, high 0\) -> Panner\(0\) -> Gain\(1\) -> Gain\(1\) -> Compressor\(r3\) -> EQ3\(mid 0, high 1.5\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination/.test(p)),
+  assert.ok(paths.some((p) => /Filter\(35 highpass\) -> EQ3\(mid -2, high 0\) -> Panner\(0\) -> Gain\(1\) -> Gain\(1\) -> Compressor\(r3\) -> EQ3\(mid 0, high 0\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination/.test(p)),
     `bass routes:\n${paths.join('\n')}`);
   assert.ok(!paths.some((p) => p.includes('Reverb')), 'no reverb on the bass');
 });
@@ -64,7 +64,7 @@ test('graph: chords and melody get the hall, only the melody gets the delay', as
   assert.ok(chords.some((p) => p.includes('Reverb(2.2)')));
   assert.ok(!chords.some((p) => p.includes('PingPongDelay')));
   const melody = routes(played(audio, 'melody', note({ midi: 72 }))[0].node);
-  assert.ok(melody.every((p) => p.includes('Filter(220 highpass)') && p.includes('EQ3(mid 0, high 1.5)')));
+  assert.ok(melody.every((p) => p.includes('Filter(220 highpass)') && p.includes('EQ3(mid 0, high -2)')));
   assert.ok(melody.some((p) => p.includes('Reverb(2.2)')));
   assert.ok(melody.some((p) => /PingPongDelay -> Filter\(300 highpass\) -> EQ3/.test(p)), 'the delay comes back through a highpass');
 });

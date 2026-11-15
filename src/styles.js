@@ -34,12 +34,44 @@ export const STYLE_FAMILIES = {
   },
 };
 
-export const DEFAULT_FAMILY = 'pop-upbeat';
+// Dance: moody, smooth and repetitive, in the spirit of French/Belgian dance-pop. Mostly minor, a
+// four-on-the-floor kick with the bass on the off-beats, soft synth sounds, and short melody riffs
+// on chord notes that are allowed to repeat (continuity) and never get busy (maxLevel).
+STYLE_FAMILIES.dance = {
+  label: 'Dance',
+  bpm: [118, 124],
+  majorChance: 0.15,
+  swing: [0, 0.015],
+  progressions: {
+    minor: [['i', 'VI', 'III', 'VII'], ['i', 'VII', 'VI', 'VII'], ['i', 'iv', 'VI', 'V'], ['i', 'VI', 'VII', 'i']],
+    major: [['vi', 'IV', 'I', 'V'], ['I', 'V', 'vi', 'IV']],
+  },
+  styles: {
+    drums: { four: 3, 'groove-dance': 2.5, 'groove-pop': 0.8 },
+    bass: { offbeat: 3, pulse: 1.5, roots: 0.8 },
+    chords: { pad: 2.5, stabs: 2, 'drolez-pop': 0.6 },
+    melody: { riff: 3, motif: 1, call: 0.5, pop909: 0.2 },
+  },
+  voices: {
+    drums: { 'kit-linn': 2, 'kit-8': 2, 'kit-breakbeat': 1.5, 'kit-techno': 0.8 },
+    bass: { 'synth-bass': 3, 'bass-electric': 1 },
+    chords: { 'synth-pad': 2.5, 'keys-epiano': 2, 'synth-keys': 2, 'keys-piano': 0.8 },
+    melody: { 'synth-pluck': 2.5, 'synth-lead': 2, 'melody-epiano': 1.5, 'voice-oohs': 0.5 },
+  },
+  continuity: { melody: [0.6, 1] }, // fit.js: a riff may repeat itself
+  maxLevel: { melody: 2 }, // rules.js: the melody stays simple, even in the chorus
+  unlisted: 0.03,
+  unlistedVoices: 0.004, // a trumpet in a dance track: almost never
+};
+
+// Improvising uses this family unless the seed asks for another ("<seed>#pop", see seed.js).
+export const DEFAULT_FAMILY = 'dance';
+export const FAMILY_TAGS = { dance: 'dance', pop: 'pop-upbeat' };
 
 export const familyOf = (structure) => (structure && !structure.song && STYLE_FAMILIES[structure.family]) || null;
 
 // The multipliers for one role ('styles' or 'voices'). 1 everywhere when there is no family.
 export function familyWeight(family, kind, role, id) {
   if (!family) return 1;
-  return family[kind]?.[role]?.[id] ?? family.unlisted ?? 1;
+  return family[kind]?.[role]?.[id] ?? (kind === 'voices' ? family.unlistedVoices : null) ?? family.unlisted ?? 1;
 }

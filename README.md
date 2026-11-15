@@ -70,9 +70,11 @@ e-piano, strummed like the piano), **synth lead** (mono, portamento, vibrato tha
 The kits have no crash sample, so the **crash** and the **riser** (a noise sweep for the bar before
 a big section) are always synthesised into the hats strip.
 
-When improvising, the seed picks a **style family** (`src/styles.js`, today always "upbeat pop"):
-104–124 bpm, mostly major, pop progressions, and soft weights that make pop grooves and pop
-instruments far more likely (anything else is rare, not banned). Instruments only change at the
+When improvising, the band plays in a **style** (`src/styles.js`; Menu → Song → Style):
+**Dance** (the default: mostly minor, 118–124 bpm, four-on-the-floor kick, the bass on the
+off-beats, soft synths, short melody riffs on chord notes that repeat and never get busy) or
+**Upbeat pop** (104–124 bpm, mostly major, pop grooves and instruments). The style is carried in the
+seed (`durhack#pop`), so every device agrees. Styles are soft weights: anything else is rare, not banned. Instruments only change at the
 start of a 4-phrase section, one part at a time, and each part keeps its instrument for at least
 two sections; the drums and the bass keep their groove for the whole section unless the energy
 jumps. Song mode ignores the family: a song brings its own tempo, chords and instruments.
@@ -102,11 +104,12 @@ device leaves the song on its own ("the song ended" in the log). Songs can bring
 
 ## Demo checklist
 
-The demo song is **Murmur** (`src/songs/murmur-pop.js`, an original first draft, about 2:27). Its
-arrangement is the story: the drums start alone, then the bass, then the chords, then the melody.
+The demo song is **Murmur** (`src/songs/murmur.js`, an original minor-key dance-pop first draft,
+about 2:22). Its arrangement is the story: the drums start alone, then the bass, then the chords,
+then the melody. (`murmur-pop` is the earlier, brighter pop draft.)
 
 1. **Before**: laptop on the speakers, `node server.js`, phones on the same Wi-Fi. Open the page on
-   the laptop with `http://localhost:8000/?demo=murmur-pop` (or Menu → Song → **Demo: Murmur**).
+   the laptop with `http://localhost:8000/?demo=murmur` (or Menu → Song → **Demo: Murmur**).
    That picks the song, ticks "End after one pass", fixes the random stream (`rng=demo`), so the
    run is the one you rehearsed, and makes the laptop claim the **drums** (`?part=drums`; any
    device can ask for a part this way). Song mode turns the director off (the song's form leads) and keeps
@@ -125,7 +128,8 @@ arrangement is the story: the drums start alone, then the bass, then the chords,
 5. **The end**: after the outro everyone plays one last chord, and every device leaves the song on
    its own ("the song ended").
 
-Also available: `?demo=ode-to-joy-pop` (a pop arrangement of Beethoven's theme, about 1:55).
+Also available: `?demo=murmur-pop` (the pop draft, about 2:27) and `?demo=ode-to-joy-pop` (a pop
+arrangement of Beethoven's theme, about 1:55).
 
 ## The mix
 

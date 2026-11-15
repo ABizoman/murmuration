@@ -684,3 +684,50 @@ mix, feel and scoring are unaffected.
 - [ ] Rehearse the resilience moments from the README checklist on real phones (airplane mode on
       the melody phone; killing the server).
 - [ ] The melody sourness (deferred from step B) — still to do at the end.
+
+## After step E — softer sounds, a Dance style, a minor-key Murmur
+
+Asked for after listening: "the notes sound a bit too harsh", with Stromae's *Alors on danse* as
+the feel to aim for (not to copy). What that track does differently: a minor key (C♯ minor, ~118–120
+bpm), a melody of a few neighbouring notes repeated, dark and soft synth sounds, and a lot of
+repetition and space. Ours was mostly major, with wide POP909 melodies, buzzy square-wave plucks
+and treble boosts on the lead and the master.
+
+### Built
+- **Softer sounds** (`audio.js`, `mix.js`): pluck now triangle waves through a 2.2 kHz lowpass
+  (was square waves at 4.5 kHz); lead lowpass ~0.9–1.6 kHz (was 1.8–2.7); pad lowpass 1.6 kHz
+  (was 3) with a slower attack; FM keys modulation index 2.5 (was 4); synth bass filter 250 Hz
+  base (was 400); the melody strip now has a −2 dB top cut (was a +1.5 dB boost) and the master
+  no treble boost (was +1.5). Synth gains re-measured against a sampled voice of the same part:
+  synth-bass −2.5, pad 11.5, keys 13.5, lead 13.5, pluck 20.5.
+- **Dance style** (`styles.js` `STYLE_FAMILIES.dance`, now the improvising default): 118–124 bpm,
+  85% minor, progressions like i–VI–III–VII; four-on-the-floor drums; new builtin loops
+  `bass/offbeat` (the house bass on the off-beats) and `melody/riff` (one-bar riffs of chord
+  notes only); synth bass, pad, e-piano and synth keys, pluck and lead; `continuity` lets the
+  melody repeat itself (fit target 0.6–1); `maxLevel` keeps the melody at medium or below;
+  off-style instruments almost never (`unlistedVoices` 0.004). **Menu → Song → Style** (Dance /
+  Upbeat pop), carried in the seed as `#pop` (`parseSeed` now reads any `#tags`).
+- **Murmur (dance)** `src/songs/murmur.js`, id `murmur`: A minor, 120 bpm, ~2:22, i–VI–III–VII
+  (Am F C G); a one-bar hook rhythm climbing through each chord's notes; the off-beat bass, a
+  bouncing octave bass in the chorus; pad and syncopated stabs; four-on-the-floor with open hats on
+  the off-beats; the same demo story (drums → bass → chords → melody). The demo (`?demo=murmur`,
+  Menu → Demo) now plays it; the pop draft stays as `murmur-pop` ("Murmur (pop draft)").
+
+### Measured
+- Tests: **146 passing** (dance style, riffs only chord notes, off-beat bass on the off-beats,
+  Murmur's melody inside the chord ≥ 88% of notes).
+- `npm run qa` (dance, four devices, `docs/qa/F-dance.txt`): band fit **0.96**; melody harmony
+  **1.00** and clash **1.00** (upbeat pop: 0.84 / 0.86); ensemble band 0.95; styles and
+  instruments 100% on-style; the form checks all pass.
+- `song:murmur` (`docs/qa/F-murmur.txt`): sections in order, chorus identical every time, every
+  fill, crash and riser in place. Headless Chrome `?demo=murmur`: plays, no page errors.
+
+### Notes
+- The URL fragment trap: `?rng=x#pop` cuts the URL at `#`. Style and end tags live in the seed
+  (Menu), never in a URL parameter.
+
+### Needs ears
+- [ ] Is it still harsh? The pluck and lead are much darker now; if too dull, raise the pluck's
+      lowpass (2200 in `PATCHES.pluck`) or the lead's `baseFrequency` (900).
+- [ ] Improvise in Dance (`/?rng=dance1`): does it have the feel you wanted?
+- [ ] Murmur (dance) on the speakers: `/?demo=murmur`.

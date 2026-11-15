@@ -25,7 +25,7 @@ const VERSE_DRUMS = { kick: 'x.....x...x.....', snare: '........X.......', hat: 
 
 export default {
   id: 'murmur-pop',
-  title: 'Murmur',
+  title: 'Murmur (pop draft)',
   composer: 'the Murmuration team, 2026 (first draft)',
   licence: 'original, ours',
   key: 'A',

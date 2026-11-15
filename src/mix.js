@@ -25,7 +25,8 @@ export const MIX = {
     // No widener: the samples are mono, so StereoWidener added no width and cost level. Width comes
     // from the synth pad's stereo Chorus instead (audio.js).
     chords: { bus: 'chords', pan: 0, hp: 180, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
-    melody: { bus: 'melody', pan: 0, hp: 220, hall: 0.16, delay: 0.18, eq: { high: 1.5, highFrequency: 2500 } },
+    // a gentle top cut (was a +1.5 dB boost): the lead should be clear, not sharp
+    melody: { bus: 'melody', pan: 0, hp: 220, hall: 0.16, delay: 0.18, eq: { high: -2, highFrequency: 3000 } },
   },
   buses: {
     drums: { comp: { threshold: -14, ratio: 4, attack: 0.01, release: 0.12, knee: 6 } },
@@ -34,7 +35,7 @@ export const MIX = {
     melody: {},
   },
   master: {
-    eq: { low: 1, high: 1.5, lowFrequency: 100, highFrequency: 10000 },
+    eq: { low: 1, high: 0, lowFrequency: 100, highFrequency: 10000 }, // no treble boost on the master: softer
     glue: { threshold: -18, ratio: 2, attack: 0.03, release: 0.2, knee: 10 },
     limiter: -1,
   },

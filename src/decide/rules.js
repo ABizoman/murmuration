@@ -21,7 +21,7 @@ export const ENTRY = { chords: 0, drums: 1, bass: 1, melody: 2 }; // song phrase
 export const REGISTERS = { drums: [0], bass: [0, 1], chords: [-1, 0, 1], melody: [-1, 0, 1] };
 const CENTRE = { bass: 40, chords: 64, melody: 74 }; // typical mean pitch at register 0
 const REGISTER_PRIOR = { bass: { 0: 1.5, 1: 0.35 }, chords: { '-1': 0.8, 0: 1.5, 1: 0.6 }, melody: { '-1': 0.45, 0: 1.5, 1: 1 } };
-const STYLE_ENERGY = { 'drums/boombap': 0.4, 'drums/four': 0.75, 'bass/roots': 0.35, 'bass/pulse': 0.75, 'chords/pad': 0.3, 'chords/stabs': 0.7 };
+const STYLE_ENERGY = { 'drums/boombap': 0.4, 'drums/four': 0.75, 'bass/roots': 0.35, 'bass/pulse': 0.75, 'bass/offbeat': 0.6, 'chords/pad': 0.3, 'chords/stabs': 0.7, 'melody/riff': 0.55 };
 
 // Who naturally imitates or responds to whom.
 const AFFINITY = {
@@ -90,6 +90,12 @@ export function ruleScores(ctx, library) {
     level[0] = ctx.phrase >= ENTRY[role] + 2 && last?.level > 0 && role !== 'chords' ? 0.012 : 0; // a rare breath
   }
   if (dir.plan?.[role]) level = clampToPlan(level, dir.plan[role], dir.energy, reasons); // the form's plan (improvising, or a song with sections)
+  // A family can keep a part simple (dance: the melody never goes busy).
+  const cap = familyOf(ctx.structure)?.maxLevel?.[role];
+  if (cap != null && Object.keys(level).some((l) => Number(l) > cap)) {
+    const kept = Object.fromEntries(Object.entries(level).filter(([l]) => Number(l) <= cap));
+    level = Object.values(kept).some((w) => w > 0) ? kept : { [cap]: 1 };
+  }
 
   // ---- 2. Which pattern ---------------------------------------------------------
   const family = familyOf(ctx.structure); // null in song mode

@@ -67,7 +67,7 @@ test('an 8-bar part starts at its section start, whatever phrase that is', () =>
 });
 
 test('the demo songs: forms, lengths and instruments as planned', () => {
-  for (const [id, minS, maxS] of [['murmur-pop', 135, 155], ['ode-to-joy-pop', 100, 125]]) {
+  for (const [id, minS, maxS] of [['murmur', 130, 150], ['murmur-pop', 135, 155], ['ode-to-joy-pop', 100, 125]]) {
     const s = structureFromSeed(`song:${id}`);
     const f = formFromStructure(s);
     assert.ok(f && f.end, `${id} ends`);
@@ -76,9 +76,12 @@ test('the demo songs: forms, lengths and instruments as planned', () => {
     for (const r of ROLES) assert.ok(SONGS[id].voices[r].length, `${id} ${r} voices`);
   }
   // Murmur builds up as the demo story: drums, then bass, then chords, then the melody
+  for (const id of ['murmur', 'murmur-pop']) {
+    const f = formFromStructure(structureFromSeed(`song:${id}`));
+    const firstIn = (r) => f.sections.findIndex((x) => x.plan[r] !== 'out');
+    assert.ok(firstIn('drums') < firstIn('bass') && firstIn('bass') < firstIn('chords') && firstIn('chords') < firstIn('melody'), id);
+  }
   const f = formFromStructure(structureFromSeed('song:murmur-pop'));
-  const firstIn = (r) => f.sections.findIndex((x) => x.plan[r] !== 'out');
-  assert.ok(firstIn('drums') < firstIn('bass') && firstIn('bass') < firstIn('chords') && firstIn('chords') < firstIn('melody'));
   // the director is not part of a song's directive (main.js passes the default): the form leads
   const d = formDirective(f, 5);
   assert.equal(d.section, 'chorus');
@@ -135,4 +138,22 @@ test('?part=: a device can ask for a part; it gets it if nobody owns it, and the
   assert.equal(nextClaim('late', [{ id: 'laptop', role: 'drums', ts: 0 }], 'drums'), 'chords');
   // keeping what you have beats a preference
   assert.equal(nextClaim('p1', [{ id: 'p1', role: 'bass', ts: 0 }], 'melody'), 'bass');
+});
+
+test('Murmur (dance): minor, the melody only uses notes of the chord under it', async () => {
+  const { chordAt } = await import('../src/render.js');
+  const s = structureFromSeed('song:murmur');
+  assert.equal(s.mode, 'minor');
+  const { parts } = simulateBand({ seed: 'song:murmur', rng: 'demo', phrases: 18, devices: 4 });
+  let notes = 0, outside = 0;
+  for (const { phrase, role, part } of parts) {
+    if (role !== 'melody') continue;
+    for (const n of part.notes) {
+      notes++;
+      const c = chordAt(s, phrase, Math.floor(n.step / 16));
+      if (!c.pcs.includes(n.midi % 12)) outside++;
+    }
+  }
+  assert.ok(notes > 50);
+  assert.ok(outside / notes < 0.12, `${outside}/${notes} melody notes outside the chord`);
 });

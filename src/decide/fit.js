@@ -12,6 +12,7 @@
 // Pure: no clock, no randomness, no Tone. Everything comes from the arguments.
 
 import { chordAt } from '../render.js';
+import { familyOf } from '../styles.js';
 
 export const WEIGHTS = { harmony: 3, bassRoot: 2, clash: 3, register: 2, rhythm: 1.5, shape: 1.5, continuity: 1, drums: 2 };
 
@@ -260,7 +261,8 @@ function continuity(notes, ctx) {
   // last phrase. (A hook section's first phrase plays the hook, which is its own reference.)
   if (ctx.directive?.isFirstPhrase && ctx.directive.section) return null;
   const last = ctx.last || ctx.history?.[0] || null;
-  const own = last?.notes?.length ? inRange(ctx.hook ? [0.9, 1] : CONTINUITY_TARGET[ctx.role] || CONTINUITY_TARGET.melody, similarity(notes, last.notes)) : null;
+  const target = familyOf(ctx.structure)?.continuity?.[ctx.role] ?? CONTINUITY_TARGET[ctx.role] ?? CONTINUITY_TARGET.melody;
+  const own = last?.notes?.length ? inRange(ctx.hook ? [0.9, 1] : target, similarity(notes, last.notes)) : null;
   if (!ctx.hook && ctx.hookRef?.length) {
     const toHook = inRange(HOOK_RELATION, similarity(notes, ctx.hookRef));
     return own == null ? toHook : 0.5 * own + 0.5 * toHook;

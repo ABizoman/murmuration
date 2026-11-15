@@ -321,7 +321,9 @@ test('a band that scores its candidates fits together better than one that does 
   };
   const pooled = { 1: [], 6: [] };
   const fits = { 1: [], 6: [] };
-  for (const seed of ['durhack', 'pop-demo', 's1']) {
+  // The upbeat-pop style: its POP909 lines are where scoring earns its keep (the dance style's riffs
+  // are chord notes by construction, so even the most likely candidate fits).
+  for (const seed of ['durhack#pop', 'pop-demo#pop', 's1#pop']) {
     const one = run(1, seed);
     const six = run(6, seed);
     // Step A5's groove bonus trades a little fit for keeping a loop, so per seed only "no worse".

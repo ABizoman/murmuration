@@ -39,8 +39,8 @@ test('mix: the EQ does what the plan says (and the kick is left alone)', () => {
   assert.ok(MIX.strips.chords.eq.mid <= -2 && MIX.strips.chords.eq.mid >= -3);
   assert.ok(centre(MIX.strips.chords.eq) > 300 && centre(MIX.strips.chords.eq) < 400, `chords cut at ${centre(MIX.strips.chords.eq)} Hz`);
   assert.equal(MIX.strips.melody.hp, 220);
-  assert.ok(MIX.strips.melody.eq.high === 1.5 && MIX.strips.melody.eq.highFrequency <= 3000);
-  assert.deepEqual(MIX.master.eq, { low: 1, high: 1.5, lowFrequency: 100, highFrequency: 10000 });
+  assert.ok(MIX.strips.melody.eq.high < 0 && MIX.strips.melody.eq.highFrequency <= 3000, 'a gentle top cut on the lead');
+  assert.deepEqual(MIX.master.eq, { low: 1, high: 0, lowFrequency: 100, highFrequency: 10000 });
   assert.equal(MIX.master.limiter, -1);
 });
 

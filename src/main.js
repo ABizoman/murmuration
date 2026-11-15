@@ -1,5 +1,5 @@
 import { KEYS } from './theory.js';
-import { structureFromSeed, randomFor, parseSeed, withEnd } from './seed.js';
+import { structureFromSeed, randomFor, parseSeed, withEnd, withStyle } from './seed.js';
 import { formFromStructure, formDirective, describeSection } from './form.js';
 import { HookBook } from './hooks.js';
 import { localNow, STEPS_PER_PHRASE } from './clock.js';
@@ -217,16 +217,22 @@ $('song').addEventListener('change', () => {
   showStructure(chosenSeed());
 });
 function showSeed(seed) {
-  const { base, end } = parseSeed(seed);
+  const { base, end, style } = parseSeed(seed);
   const song = songFromSeed(base);
   $('song').value = song ? song.id : '';
   if (!song) $('seed').value = base;
   if ($('endAfterPass')) $('endAfterPass').checked = end;
+  if ($('style')) $('style').value = style || 'dance';
 }
-// What Start plays: the picked song or the seed, with "#end" if "End after one pass" is ticked.
-const chosenSeed = () => withEnd($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack', !!$('endAfterPass')?.checked);
+// What Start plays: the picked song or the seed, with the style ("#pop") and "#end" tags.
+const chosenSeed = () => {
+  const song = $('song').value;
+  const base = song ? songSeed(song) : withStyle($('seed').value.trim() || 'durhack', $('style')?.value);
+  return withEnd(base, !!$('endAfterPass')?.checked);
+};
 $('endAfterPass')?.addEventListener('change', () => !swarm.song && showStructure(chosenSeed()));
-showStructure($('seed').value);
+$('style')?.addEventListener('change', () => !swarm.song && showStructure(chosenSeed()));
+showStructure(chosenSeed());
 
 function playSong(song) {
   const structure = showStructure(song.seed);
@@ -323,7 +329,7 @@ function prepareDemo(id) {
 }
 $('demoStart')?.addEventListener('click', () => {
   if (swarm.playing) return log('leave the current song first');
-  if (prepareDemo('murmur-pop')) $('start').click();
+  if (prepareDemo('murmur')) $('start').click();
 });
 if (DEMO) {
   if (prepareDemo(DEMO)) setTimeout(() => log(`<b>demo</b>: "${esc(SONGS[DEMO].title)}" is ready — press Start (rng "${esc(RNG)}")`), 0);

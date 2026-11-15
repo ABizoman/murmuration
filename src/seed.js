@@ -5,7 +5,7 @@ import { KEYS } from './theory.js';
 import { PACK_PROGRESSIONS } from './packs.js';
 import { songFromSeed } from './songs/index.js';
 import { MAX_SWING } from './clock.js';
-import { STYLE_FAMILIES, DEFAULT_FAMILY } from './styles.js';
+import { STYLE_FAMILIES, DEFAULT_FAMILY, FAMILY_TAGS } from './styles.js';
 import { songForm } from './form.js';
 
 function hash(str) {
@@ -51,22 +51,27 @@ export const PROGRESSIONS = {
 // Swing is shared timing: it must be a plain number in range on every device.
 const clampSwing = (x) => Math.min(MAX_SWING, Math.max(0, Number(x) || 0));
 
-// "<seed>#end": the same song, but it ends after one pass of the form (form.js) instead of looping.
-// Carried in the seed so every device that joins knows it. The music is the same with or without.
+// Tags after the seed, carried in the seed so every device that joins knows them:
+//   "#end"   the song ends after one pass of the form (form.js) instead of looping
+//   "#pop"   improvise in the upbeat-pop style instead of the default (dance); "#dance" is the default
+// e.g. "durhack#pop#end". The rest of the music is decided from the plain seed.
 export const END_SUFFIX = '#end';
 export function parseSeed(seed) {
-  const s = String(seed ?? '');
-  return s.endsWith(END_SUFFIX) ? { base: s.slice(0, -END_SUFFIX.length), end: true } : { base: s, end: false };
+  const [base, ...tags] = String(seed ?? '').split('#');
+  const style = tags.find((t) => FAMILY_TAGS[t]) ?? null;
+  return { base, end: tags.includes('end'), style };
 }
-export const withEnd = (seed, end) => (end ? `${parseSeed(seed).base}${END_SUFFIX}` : parseSeed(seed).base);
+const joinSeed = ({ base, end, style }) => `${base}${style && style !== 'dance' ? `#${style}` : ''}${end ? END_SUFFIX : ''}`;
+export const withEnd = (seed, end) => joinSeed({ ...parseSeed(seed), end: !!end });
+export const withStyle = (seed, style) => joinSeed({ ...parseSeed(seed), style: FAMILY_TAGS[style] ? style : null });
 
 export function structureFromSeed(fullSeed) {
-  const { base: seed, end } = parseSeed(fullSeed);
-  const s = structureFromBase(seed);
+  const { base: seed, end, style } = parseSeed(fullSeed);
+  const s = structureFromBase(seed, FAMILY_TAGS[style] ?? DEFAULT_FAMILY);
   return end ? { ...s, end: true } : s;
 }
 
-function structureFromBase(seed) {
+function structureFromBase(seed, familyName) {
   // "song:<id>" plays a fixed song: its own key, tempo and chords, and the agents build it up.
   const song = songFromSeed(seed);
   if (song) {
@@ -91,7 +96,7 @@ function structureFromBase(seed) {
   // Swing is drawn last on purpose: every seed keeps the key, tempo and progression it had before.
   const swing = clampSwing(Math.round(r() * 60) / 1000); // 0 to 0.06 of a 16th: upbeat pop, not jazz
   const plain = { seed, key, mode, bpm, progression: pick.chords, swing, mood: pick.mood };
-  return withFamily(plain, r, DEFAULT_FAMILY);
+  return withFamily(plain, r, familyName);
 }
 
 // The style family (styles.js) re-draws the mode, tempo, progression and swing from its own ranges.

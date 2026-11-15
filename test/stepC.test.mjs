@@ -45,7 +45,9 @@ test('form: with "end after one pass", one coda phrase after the outro, then not
 });
 
 test('seed: "#end" is carried in the seed and changes nothing else', () => {
-  assert.deepEqual(parseSeed('durhack#end'), { base: 'durhack', end: true });
+  assert.deepEqual(parseSeed('durhack#end'), { base: 'durhack', end: true, style: null });
+  assert.deepEqual(parseSeed('durhack#pop#end'), { base: 'durhack', end: true, style: 'pop' });
+  assert.equal(withEnd('durhack#pop', true), 'durhack#pop#end');
   assert.equal(withEnd('durhack', true), 'durhack#end');
   assert.equal(withEnd('durhack#end', false), 'durhack');
   const a = structureFromSeed('durhack'), b = structureFromSeed('durhack#end');

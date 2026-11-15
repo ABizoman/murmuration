@@ -97,7 +97,7 @@ const PATCHES = {
       filterEnvelope: { attack: 0.005, decay: 0.1, sustain: 1, release: 0.12, baseFrequency: 2000, octaves: 0 } }).connect(out);
     sub.volume.value = -6;
     const saw = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, portamento: 0.02, envelope: env, filter: { type: 'lowpass', Q: 1 },
-      filterEnvelope: { attack: 0.005, decay: 0.12, sustain: 0.3, release: 0.12, baseFrequency: 400, octaves: 2.5 } }).connect(out);
+      filterEnvelope: { attack: 0.005, decay: 0.12, sustain: 0.3, release: 0.12, baseFrequency: 250, octaves: 2.5 } }).connect(out);
     return {
       play(n, t, d, v, freq) {
         saw.triggerAttackRelease(freq(n.midi), d, t, v);
@@ -106,27 +106,28 @@ const PATCHES = {
     };
   },
 
-  // Fat saw pad -> lowpass 3 kHz -> stereo chorus: where the chords get their width (no widener).
+  // Fat saw pad -> lowpass 1.6 kHz (dark and soft) -> stereo chorus: where the chords get their width.
   pad(strip, out) {
     const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.6, wet: 0.4 }).connect(out);
     chorus.start();
-    const filter = new Tone.Filter(3000, 'lowpass').connect(chorus);
+    const filter = new Tone.Filter(1600, 'lowpass').connect(chorus);
     return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 12, oscillator: { type: 'fatsawtooth', count: 3, spread: 25 },
-      envelope: { attack: 0.08, decay: 0.4, sustain: 0.7, release: 1.2 } }).connect(filter));
+      envelope: { attack: 0.15, decay: 0.4, sustain: 0.7, release: 1.2 } }).connect(filter));
   },
 
   // A soft FM electric piano. Its voice's family is 'keys', so feel.js strums it.
   keys(strip, out) {
-    return poly(new Tone.PolySynth(Tone.FMSynth, { maxPolyphony: 12, harmonicity: 3, modulationIndex: 4,
+    return poly(new Tone.PolySynth(Tone.FMSynth, { maxPolyphony: 12, harmonicity: 3, modulationIndex: 2.5,
       oscillator: { type: 'sine' }, modulation: { type: 'sine' },
       envelope: { attack: 0.005, decay: 1.2, sustain: 0.2, release: 0.8 },
       modulationEnvelope: { attack: 0.005, decay: 0.6, sustain: 0.1, release: 0.6 } }).connect(out));
   },
 
+  // Triangle waves (soft, few overtones) through a 2.2 kHz lowpass: round, not buzzy.
   pluck(strip, out) {
-    const filter = new Tone.Filter(4500, 'lowpass').connect(out);
-    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 6, oscillator: { type: 'fatsquare', count: 2, spread: 12 },
-      envelope: { attack: 0.002, decay: 0.25, sustain: 0, release: 0.2 } }).connect(filter));
+    const filter = new Tone.Filter(2200, 'lowpass').connect(out);
+    return poly(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 6, oscillator: { type: 'fattriangle', count: 2, spread: 12 },
+      envelope: { attack: 0.004, decay: 0.3, sustain: 0.08, release: 0.25 } }).connect(filter));
   },
 
   // A mono lead with portamento, and a vibrato that fades in 300 ms into every note.
@@ -134,7 +135,7 @@ const PATCHES = {
     const vibrato = new Tone.Vibrato({ frequency: 5, depth: 0 }).connect(out);
     const synth = new Tone.MonoSynth({ oscillator: { type: 'fatsawtooth', count: 2, spread: 12 }, portamento: 0.03,
       envelope: { attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.25 }, filter: { type: 'lowpass', Q: 0.8 },
-      filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.6, release: 0.25, baseFrequency: 1800, octaves: 0.6 } }).connect(vibrato);
+      filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.6, release: 0.25, baseFrequency: 900, octaves: 0.8 } }).connect(vibrato);
     return {
       play(n, t, d, v, freq) {
         vibrato.depth.cancelScheduledValues(t);

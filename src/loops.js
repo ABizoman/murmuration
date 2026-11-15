@@ -57,6 +57,11 @@ add('bass', 'pulse', 'sparse', 1, P([[0, 0, 3, 0, 0.85], [0, 8, 3, 0, 0.7]]));
 add('bass', 'pulse', 'medium', 1, P(eighths.map((s, i) => [0, s, 1, 0, i % 2 ? 0.55 : 0.85])));
 add('bass', 'pulse', 'busy', 1, P(eighths.map((s, i) => [0, s, 1, [0, 7, 0, 7, 0, 7, 4, 2][i], i % 2 ? 0.6 : 0.9])));
 
+// Dance (step "dance" family): the house bass bounces on the off-beats, the kick takes the beats.
+add('bass', 'offbeat', 'sparse', 1, P([[0, 2, 2, 0, 0.8], [0, 10, 2, 0, 0.75]]), { energy: 0.45 });
+add('bass', 'offbeat', 'medium', 1, P([[0, 2, 2, 0, 0.85], [0, 6, 2, 0, 0.7], [0, 10, 2, 0, 0.85], [0, 14, 2, 0, 0.7]]), { energy: 0.6 });
+add('bass', 'offbeat', 'busy', 1, P([[0, 2, 2, 0, 0.85], [0, 6, 2, 7, 0.7], [0, 10, 2, 0, 0.85], [0, 14, 2, 7, 0.7]]), { energy: 0.75 });
+
 // --- Chords -----------------------------------------------------------------
 add('chords', 'pad', 'sparse', 1, R([[0, 0, 16, 0.5]]), { voicing: 4 });
 add('chords', 'pad', 'medium', 1, R([[0, 0, 8, 0.6], [0, 8, 8, 0.45]]), { voicing: 4 });
@@ -65,6 +70,12 @@ add('chords', 'pad', 'busy', 1, R([[0, 0, 6, 0.6], [0, 6, 4, 0.45], [0, 10, 6, 0
 add('chords', 'stabs', 'sparse', 1, R([[0, 0, 3, 0.75]]), { voicing: 3 });
 add('chords', 'stabs', 'medium', 1, R([[0, 0, 3, 0.8], [0, 6, 2, 0.6], [0, 10, 3, 0.7]]), { voicing: 3 });
 add('chords', 'stabs', 'busy', 1, R([[0, 0, 2, 0.8], [0, 3, 2, 0.55], [0, 6, 2, 0.7], [0, 10, 2, 0.6], [0, 14, 2, 0.5]]), { voicing: 3 });
+
+// --- Melody: riffs (dance). One bar, chord notes only (root, third, fifth, octave), repeated over
+// the chords: a small range and a lot of repetition, like a dance-floor hook.
+add('melody', 'riff', 'sparse', 1, P([[0, 4, 2, 4, 0.75], [0, 8, 6, 2, 0.65]]), { energy: 0.35 });
+add('melody', 'riff', 'medium', 1, P([[0, 0, 2, 0, 0.8], [0, 3, 2, 2, 0.6], [0, 6, 2, 4, 0.7], [0, 10, 4, 2, 0.65]]), { energy: 0.55 });
+add('melody', 'riff', 'busy', 1, P([[0, 0, 2, 4, 0.8], [0, 2, 2, 2, 0.6], [0, 6, 2, 4, 0.7], [0, 8, 2, 0, 0.75], [0, 11, 2, 2, 0.6], [0, 14, 2, 4, 0.65]]), { energy: 0.75 });
 
 // --- Melody (4 bars: question in bars 0-1, answer in bars 2-3) ---------------
 add('melody', 'motif', 'sparse', 4, P([
