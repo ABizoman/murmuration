@@ -1,0 +1,27 @@
+Murmuration music QA · 20 phrases · rng "qa-<seed>" · seeds song:murmur
+four devices, one part each (60 ms gossip) · horizons staggered (drums + chords 2, bass 1.5, melody 1 bars)
+(loop/voice changes count only consecutive phrases where the part plays in both)
+
+== song:murmur: A minor · 120 bpm · i VI III VII (259 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.62  9/13          0/15           rhythm 0.61, drums 0.55, continuity 1.00
+bass      0.88  7/12          0/13           harmony 1.00, bassRoot 1.00, rhythm 0.44, shape 0.61, clash 0.98, register 1.00, continuity 0.87
+chords    0.90  9/14          0/15           clash 0.87, register 1.00, rhythm 0.87, continuity 0.89
+melody    0.94  6/11          0/11           harmony 0.95, clash 1.00, register 1.00, rhythm 0.88, shape 0.83, continuity 0.67
+form: intro intro2 verse pre chorus verse2 pre chorus breakdown finalChorus outro end
+  hook in later chorus phrases 5/5 · chorus melody continuity 1.00 · fills 5/5 · crashes 5/5 · risers 3/3
+
+== all seeds
+role       fit  loop changes  voice changes  terms
+drums     0.62  9/13          0/15           rhythm 0.61, drums 0.55, continuity 1.00
+bass      0.88  7/12          0/13           harmony 1.00, bassRoot 1.00, rhythm 0.44, shape 0.61, clash 0.98, register 1.00, continuity 0.87
+chords    0.90  9/14          0/15           clash 0.87, register 1.00, rhythm 0.87, continuity 0.89
+melody    0.94  6/11          0/11           harmony 0.95, clash 1.00, register 1.00, rhythm 0.88, shape 0.83, continuity 0.67
+band fit 0.83 · melody continuity 0.67
+ensemble (each part scored afterwards against what the others actually played that phrase):
+  drums     0.51  rhythm 0.59, drums 0.34, continuity 1.00 · heard same-phrase: bass 0%, chords 0%, melody 0%
+  bass      0.89  harmony 1.00, bassRoot 1.00, rhythm 0.47, shape 0.61, clash 1.00, register 1.00, continuity 0.87 · heard same-phrase: drums 94%, chords 94%, melody 0%
+  chords    0.95  clash 1.00, register 1.00, rhythm 0.81, continuity 0.89 · heard same-phrase: drums 0%, bass 0%, melody 0%
+  melody    0.93  harmony 0.95, clash 1.00, register 1.00, rhythm 0.81, shape 0.83, continuity 0.67 · heard same-phrase: drums 94%, bass 94%, chords 94%
+  band 0.82
+form: sections in order yes · hook in later chorus phrases 100% · chorus melody continuity 1.00 · fills 5/5 · crashes 5/5 · risers 3/3

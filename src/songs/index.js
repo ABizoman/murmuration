@@ -4,6 +4,9 @@ import { compileSong } from './format.js';
 import mountainKing from './mountain-king.js';
 import canon from './canon-in-d.js';
 import ode from './ode-to-joy.js';
+import murmur from './murmur.js';
+import murmurPop from './murmur-pop.js';
+import odePop from './ode-to-joy-pop.js';
 
 export const SONGS = {};
 
@@ -13,7 +16,8 @@ export function registerSong(def) {
   return song;
 }
 
-for (const def of [mountainKing, canon, ode]) registerSong(def);
+for (const def of [murmur, murmurPop, odePop, mountainKing, canon, ode]) registerSong(def);
 
 export const songSeed = (id) => `song:${id}`;
-export const songFromSeed = (seed) => (typeof seed === 'string' && seed.startsWith('song:') ? SONGS[seed.slice(5)] || null : null);
+// A trailing "#end" (end after one pass, see seed.js) is not part of the song id.
+export const songFromSeed = (seed) => (typeof seed === 'string' && seed.startsWith('song:') ? SONGS[seed.slice(5).split('#')[0]] || null : null);

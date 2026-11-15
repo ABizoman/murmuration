@@ -12,11 +12,15 @@
 // Pure: no clock, no randomness, no Tone. Everything comes from the arguments.
 
 import { chordAt } from '../render.js';
+import { familyOf } from '../styles.js';
 
 export const WEIGHTS = { harmony: 3, bassRoot: 2, clash: 3, register: 2, rhythm: 1.5, shape: 1.5, continuity: 1, drums: 2 };
 
 // Which terms each role is judged on.
 export const TERMS = {
+  pad: ['clash', 'register', 'continuity'],
+  arp: ['harmony', 'clash', 'register', 'continuity'],
+  perc: ['rhythm', 'continuity'],
   drums: ['rhythm', 'continuity', 'drums'],
   bass: ['harmony', 'bassRoot', 'clash', 'register', 'rhythm', 'shape', 'continuity'],
   chords: ['clash', 'register', 'rhythm', 'continuity'],
@@ -29,7 +33,7 @@ export const metric = (step) => {
   return s === 0 ? 1 : s === 8 ? 0.8 : s === 4 || s === 12 ? 0.6 : s % 2 === 0 ? 0.35 : 0.2;
 };
 
-const PITCHED = ['bass', 'chords', 'melody'];
+const PITCHED = ['bass', 'chords', 'melody', 'pad', 'arp'];
 const SNARE = new Set(['snare', 'clap', 'rim']);
 const TOM = new Set(['tom1', 'tom2', 'tom3']);
 const WEAK = 0.35; // a step this unimportant can carry a passing note
@@ -130,6 +134,9 @@ function clash(notes, ctx, structure, phrase) {
   for (const r of PITCHED) {
     if (r === ctx.role) continue;
     const peer = ctx.peers?.[r];
+    // Only a part for the *same* phrase can clash: last phrase's notes sat over other chords (and
+    // with a chord change per section, comparing against them flags clashes that never sound).
+    if (peer && peer.phrase !== ctx.phrase) continue;
     const theirs = peer?.notes?.length ? line(peer.notes) : [];
     if (!theirs.length) continue;
     compared = true;
@@ -236,20 +243,39 @@ const contour = (notes) => {
   return l.slice(1).map((m, i) => Math.sign(m - l[i]));
 };
 
-// Similar to my own last phrase, but not identical: half rhythm, half melodic shape.
-function continuity(notes, ctx) {
-  const last = ctx.last || ctx.history?.[0] || null;
-  if (!notes.length || !last?.notes?.length) return null;
-  const rhythmSim = jaccard(onsets(notes), onsets(last.notes)) ?? 0;
-  const a = contour(notes), b = contour(last.notes);
-  let sim = rhythmSim;
-  if (a.length && b.length) {
-    let same = 0;
-    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) same++;
-    sim = 0.5 * rhythmSim + 0.5 * (same / Math.max(a.length, b.length));
-  }
-  return inRange(ctx.hook ? [0.9, 1] : [0.4, 0.75], sim);
+// How similar to my own last phrase each role should be. A melody should vary; a pop drummer
+// repeats the groove exactly, and the bass and chords mostly do (step A5: an identical drum
+// phrase used to score 0.17 here, which made the drums swap loop every other phrase).
+export const CONTINUITY_TARGET = { drums: [0.8, 1], bass: [0.5, 0.9], chords: [0.5, 0.9], melody: [0.4, 0.75], pad: [0.7, 1], arp: [0.6, 1], perc: [0.8, 1] };
+
+// How alike two parts are: half rhythm, half melodic shape (just rhythm for drums).
+export function similarity(notes, ref) {
+  const rhythmSim = jaccard(onsets(notes), onsets(ref)) ?? 0;
+  const a = contour(notes), b = contour(ref);
+  if (!a.length || !b.length) return rhythmSim;
+  let same = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) same++;
+  return 0.5 * rhythmSim + 0.5 * (same / Math.max(a.length, b.length));
 }
+
+// Similar to my own last phrase, but (for the melody) not identical. In a verse, with the chorus
+// hook known (ctx.hookRef: the hook rendered over this phrase), the melody should also be related
+// to the hook without copying it, so the verse leads somewhere.
+function continuity(notes, ctx) {
+  if (!notes.length) return null;
+  // The first phrase of a form section (form.js) is meant to change: it is not judged against the
+  // last phrase. (A hook section's first phrase plays the hook, which is its own reference.)
+  if (ctx.directive?.isFirstPhrase && ctx.directive.section) return null;
+  const last = ctx.last || ctx.history?.[0] || null;
+  const target = familyOf(ctx.structure)?.continuity?.[ctx.role] ?? CONTINUITY_TARGET[ctx.role] ?? CONTINUITY_TARGET.melody;
+  const own = last?.notes?.length ? inRange(ctx.hook ? [0.9, 1] : target, similarity(notes, last.notes)) : null;
+  if (!ctx.hook && ctx.hookRef?.length) {
+    const toHook = inRange(HOOK_RELATION, similarity(notes, ctx.hookRef));
+    return own == null ? toHook : 0.5 * own + 0.5 * toHook;
+  }
+  return own;
+}
+export const HOOK_RELATION = [0.4, 0.7]; // a verse melody vs the chorus hook
 
 // Drummer's job: lock the kick to the bass, keep a backbeat once there is any weight, and save
 // the fills for the end of the phrase.

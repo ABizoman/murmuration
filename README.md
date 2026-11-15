@@ -35,19 +35,152 @@ Other switches for listening work:
 | `?rng=test1` | fixes every agent's random stream: same seed + same rng = same music |
 | `?solo=bass` | hears one part on its own (`drums`, `bass`, `chords`, `melody`) — how `ROLE_GAIN` is measured |
 | `?lite=1` / `?lite=0` | forces the lite mix on or off instead of deciding from the device |
+| `?seed=durhack` | start from this seed (otherwise every page load picks a fresh one, so each improvised song is new) |
+| `?voice=chords:synth-pad` | pins one part's instrument (comma-separate several: `?voice=bass:synth-bass,melody:synth-pluck`); everything else stays automatic. With `?solo=` it is how a voice's `gain` is measured |
+| `?feel=off` | no swing and no humanising on **this device only**: a straight-grid "before" clip for any feel change. Never use it while several devices play together (that device would be out of time with the others) |
 
-**Re-measuring `ROLE_GAIN`** (in `src/audio.js`, after any change to `src/mix.js`): open
-`?rng=test1&solo=drums`, press Start, let it play a few phrases and read the loudness from the
-meters; repeat for each part; then move each `ROLE_GAIN` by the difference so all four land within
-about 1 dB of each other. Finally play everything together and check the peak stays under −1 dB and
-the clip counter stays at 0.
+**A feel A/B in one URL change:** `?rng=test1` then `?rng=test1&feel=off`. The decisions are
+identical; only the swing and the humanising differ.
+
+**Re-measuring `ROLE_GAIN`** (in `src/audio.js`, after any change to `src/mix.js` or a voice's
+`gain`): `npm run measure-levels`. It starts the server on a spare port, plays each part on its own
+in headless Chrome (`?solo=<role>&lite=0`) for 40 s, reads the master meters and prints the change
+each part needs to reach the target balance: **drums and bass equal, chords 2 dB below them, melody
+1 dB above the chords**. `--apply` writes the new values into `src/audio.js` (run it again to
+confirm), `--full` also plays the whole band and checks the peak stays under −1 dBFS with no clips,
+and `--extra voice=chords:synth-pad` adds URL parameters to every run. It uses Playwright's
+Chromium if installed (`npx playwright install chromium`) or else the system Chrome, and serves
+Tone.js from `node_modules`, so it works offline.
+
+By hand: open `?rng=test1&solo=drums`, press Start, let it play a few phrases and read the loudness
+from the meters; repeat for each part; move each `ROLE_GAIN` by the difference; then play everything
+together and check the peak stays under −1 dB and the clip counter stays at 0.
+
+**`npm run qa`** runs the whole band in Node for 40 phrases on five seeds (fixed rng, the real pack
+library, no browser) and prints the fit of every part, how often each part changes loop and
+instrument, and the melody's continuity. `npm run qa -- --save <name>` also writes the report to
+`docs/qa/<name>.txt`, so the numbers can be compared from one change to the next.
+
+## Instruments
+
+`src/voices.js` lists every instrument per part. Sampled ones load from `samples/`; synth ones name a
+patch built in `src/audio.js` (`PATCHES`): **synth bass** (saw + sine sub an octave down),
+**synth pad** (fat saw, lowpass, stereo chorus: the only stereo-wide part), **synth keys** (soft FM
+e-piano, strummed like the piano), **synth lead** (mono, portamento, vibrato that fades in) and
+**synth pluck**. While a sampled voice is loading, the part plays through its role's default patch.
+The kits have no crash sample, so the **crash** and the **riser** (a noise sweep for the bar before
+a big section) are always synthesised into the hats strip.
+
+When improvising, the band plays in a **style** (`src/styles.js`; Menu → Song → Style):
+**Dance** (the default: mostly minor, 118–124 bpm, four-on-the-floor kick, the bass on the
+off-beats, soft synths, short melody riffs on chord notes that repeat and never get busy) or
+**Upbeat pop** (104–124 bpm, mostly major, pop grooves and instruments). The style is carried in the
+seed (`durhack#pop`), so every device agrees. Styles are soft weights: anything else is rare, not banned. Instruments only change at the
+start of a 4-phrase section, one part at a time, and each part keeps its instrument for at least
+two sections; the drums and the bass keep their groove for the whole section unless the energy
+jumps. Song mode ignores the family: a song brings its own tempo, chords and instruments.
+
+## The song form (improvising)
+
+An improvised song follows a pop form (`src/form.js`), the same on every device because it is a
+pure function of the phrase number:
+
+```
+intro 1 · verse 2 · pre 1 · chorus 2 · verse2 2 · chorus 2 · breakdown 1 · finalChorus 2 · outro 1
+```
+
+(phrases of 4 bars; after the outro it goes round again from verse2). Each section sets the energy
+and how much each part plays (sitting out, light, normal, full); the director's suggestions nudge
+the energy by up to ±0.2 but never bring in a part the section leaves out. The first time a part
+plays the first chorus, its loop becomes its **hook** (`src/hooks.js`): every later chorus plays
+it again, on whichever device has the part, and the verses' melody is scored to relate to it. The
+drums add a **fill** in the last bar before the pre, choruses and verse2, a **crash** on the first
+downbeat of choruses and verse2, and a **riser** under the bar before each chorus
+(`src/transitions.js`); in the breakdown's last bar only the chords keep playing.
+
+**End after one pass** (Menu → Song, or the checkbox on `classic.html`) adds `#end` to the seed, so
+every device that joins knows: after the outro the band plays one last chord together and every
+device leaves the song on its own ("the song ended" in the log). Songs can bring their own form
+(sections, see `docs/ADDING_SONGS.md`); songs without one build themselves up as before.
+
+## The wheel
+
+Centre: start / join / leave. Turn it: your part busier or calmer. Top: the menu. **Right / left:
+next / previous song, for the whole band** (next = a fresh random seed in the same style).
+Bottom: mute / unmute your part (it rests from the next phrase). Every page load gets a random
+seed; change the song or seed in the menu and press the centre (or Enter in the seed box) to play
+it as a new song, for everyone (`songWins`: a newer song generation wins over the one playing).
+
+## Telling the band what to play
+
+The box at the bottom ("Tell your agent what to play") understands, on any device:
+
+- **how busy / how high**: "busier", "calm it down", "take out the drums", "bring the bass back",
+  "go higher", "let it decide" (hands everything back to the agent)
+- **instruments**: "play it on piano", "switch the chords to strings", "make the melody a sax",
+  "drums on house kit", "different instrument"
+- **parts playing off each other**: "melody answer the bass", "have the bass copy the drums",
+  "stop echoing"
+- **the whole song**: "build it up", "bring it down", "spotlight on the melody" (a proposal the
+  swarm votes on, like the director's; lasts 4-8 phrases; not in a written song like Murmur)
+
+It works **across devices**: type "drums on house kit" on a phone and the device playing the drums
+switches (it shows a toast; the log says who asked). Rules first, instantly and offline; anything
+they don't understand ("make it feel like a sunset", "funkier") goes to the AI on the laptop
+(`POST /instruct`: Jev, else Gemini), which answers six multiple-choice questions that become the
+same kind of change (`src/ui/interpret.js`). With no key it says it didn't catch that.
+
+## Demo checklist
+
+The demo song is **Murmur** (`src/songs/murmur.js`, an original minor-key dance-pop first draft,
+about 2:22). Its arrangement is the story: the drums start alone, then the bass, then the chords,
+then the melody. (`murmur-pop` is the earlier, brighter pop draft.)
+
+1. **Before**: laptop on the speakers, `node server.js`, phones on the same Wi-Fi. Open the page on
+   the laptop with `http://localhost:8000/?demo=murmur` (or Menu → Song → **Demo: Murmur**).
+   That picks the song, ticks "End after one pass", fixes the random stream (`rng=demo`), so the
+   run is the one you rehearsed, and makes the laptop claim the **drums** (`?part=drums`; any
+   device can ask for a part this way). Song mode turns the director off (the song's form leads) and keeps
+   one instrument per part, on every device, however it joined.
+2. **Start** on the laptop: it covers every part at first, but the intro is drums only.
+3. **Phones join** (scan the QR code, press **Join the song**) during the intro and verse: the
+   first phone takes the chords, the second the bass, the third the melody (the swarm's usual
+   order); a part with no phone of its own is covered by one of the devices. The song itself brings
+   the bass in on phrase 2, the chords on phrase 3 and the melody on the pre-chorus (phrase 5),
+   whichever device has them, so the build-up is the same however fast the phones join.
+4. **Resilience moments** (any time after the first chorus):
+   - put the melody phone in **airplane mode**: within a beat or two another device takes the
+     melody over and the hook carries on; turn airplane mode off and the phone rejoins.
+   - **kill the server** (Ctrl+C): the phones already have direct links and the shared clock;
+     nothing stops. Jev falls back to the rules (offline), and a song needs no director.
+5. **The end**: after the outro everyone plays one last chord, and every device leaves the song on
+   its own ("the song ended").
+
+**If something goes wrong on the day**
+- *Crackling, "bad radio" static, dropouts*: use a **wired** speaker (or the laptop's own) rather
+  than Bluetooth, which crackles in a room full of 2.4 GHz devices; plug the laptop in (battery
+  saver slows the audio). The page asks for big audio buffers (`?latency=interactive` for the old
+  small ones) and drops to the lite mix by itself if the browser reports glitches ("Under the hood"
+  shows "N audio glitches" where Chrome counts them).
+- *A phone scans the QR code and gets a dark screen or nothing*: the phone must be on the **same
+  Wi-Fi** as the laptop, and venue Wi-Fi often blocks devices from seeing each other; a phone hotspot
+  (laptop and phones all on it) always works. The terminal prints the address in the QR code and the
+  other addresses of the laptop ("if phones can't reach it, try …"); `HOST=<address> node server.js`
+  picks one. Tone.js now comes from the laptop (`npm install` once), so phones need no internet.
+- *Every device plays its own whole band* (Swarm shows only "me"): the devices can't link up.
+  If the direct link is blocked (venue Wi-Fi, Windows firewall on a "public" network) they now
+  fall back to talking through the server after ~3.5 s (Swarm's link column says "via server"); in
+  that case killing the server does stop them, so skip that resilience moment.
+
+Also available: `?demo=murmur-pop` (the pop draft, about 2:27) and `?demo=ode-to-joy-pop` (a pop
+arrangement of Beethoven's theme, about 1:55).
 
 ## The mix
 
 `src/mix.js` holds the whole signal flow as data and `src/audio.js` builds the Tone.js graph from it:
 
 ```
-per part:   sampler/synth → strip (highpass + EQ3 + pan or widener) → bus   (+ sends)
+per part:   sampler/synth → strip (highpass + EQ3 + pan) → bus   (+ sends)
 drums bus   → Compressor (ratio 4) ─┐          kick, snare/toms and hats each have their own strip,
 bass bus    → duck → Compressor (3) ┤          so the hats can be filtered and panned and the snare
 chords bus  → duck ─────────────────┤          can sit further back in the room than the kick
@@ -62,7 +195,7 @@ sidechain and no analysis. Each drum kit therefore loads three samplers (kick / 
 hats), one per route.
 
 Weak devices (four cores or fewer, or the frame watchdog in `src/main.js` noticing that the engine's
-ticks are slipping) switch to the **lite** graph: one reverb instead of two and no widener, which
+ticks are slipping) switch to the **lite** graph: one reverb instead of two, which
 keeps a phone in time. `npm test` checks the routing, the ducking and the lite graph against a fake
 Tone.js (`test/fake-tone.mjs`), so the signal flow is covered even though the sound is not.
 

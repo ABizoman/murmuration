@@ -35,7 +35,7 @@ test('registers stay within what each part allows', () => {
 });
 
 test('"let it decide" hands control back to the agent', () => {
-  assert.deepEqual(parseInstruction('let it decide', fresh(), ['chords']).changes, [{ role: 'chords', set: { auto: true } }]);
+  assert.deepEqual(parseInstruction('let it decide', fresh(), ['chords']).changes, [{ role: 'chords', set: { auto: true, pinVoice: null, pinInteraction: null } }]);
 });
 
 test('"bring the melody back" after resting', () => {

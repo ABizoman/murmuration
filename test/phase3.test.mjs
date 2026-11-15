@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLibrary, ROLES } from '../src/loops.js';
+import { createLibrary, ROLES, CORE_ROLES } from '../src/loops.js';
 import { Agent } from '../src/agent.js';
 import { Engine } from '../src/engine.js';
 import { renderPhrase } from '../src/render.js';
@@ -224,11 +224,17 @@ test('simulation: 40 phrases of four agents reacting to each other stay valid an
       if (n.midi != null) assert.ok(n.midi >= (role === 'bass' ? 26 : 45) && n.midi <= (role === 'bass' ? 70 : 98), `${role} ${n.midi} ${p.why}`);
     }
   }
-  const late = parts.filter((x) => x.phrase >= 3);
+  const late = parts.filter((x) => x.phrase >= 3 && CORE_ROLES.includes(x.role)); // the extra layers don't echo or answer
   const interactions = late.filter((x) => x.part.d.interaction !== 'none');
   assert.ok(interactions.length / late.length > 0.15 && interactions.length / late.length < 0.85, `interaction share ${interactions.length}/${late.length}`);
   assert.ok(new Set(late.map((x) => `${x.role}:${x.part.d.interaction}`)).size >= 5, 'several kinds of echo/answer happen');
-  for (const r of ROLES) assert.ok(new Set(late.filter((x) => x.role === r).map((x) => x.part.d.level)).size >= 2, `${r} changes busyness`);
+  // The drums keep their groove for a section (step A5), so with no direction they may hold one
+  // level throughout: they still change pattern. The test below checks they follow the energy.
+  for (const r of CORE_ROLES) {
+    const mine = late.filter((x) => x.role === r);
+    if (r === 'drums' || r === 'bass') assert.ok(new Set(mine.map((x) => x.part.loop?.id)).size >= 2, `${r} changes pattern`); // grooves hold their busyness
+    else assert.ok(new Set(mine.map((x) => x.part.d.level)).size >= 2, `${r} changes busyness`);
+  }
   // balance: the band's average level stays near the middle
   const avg = late.reduce((a, x) => a + x.part.d.level, 0) / late.length;
   assert.ok(avg > 1.5 && avg < 2.5, `average level ${avg}`);
@@ -266,8 +272,9 @@ test('instruments: chosen per section, families avoid each other, every voice ha
     if (fams[0] && fams[1]) { total++; clashes += fams[0] === fams[1]; }
   }
   assert.ok(clashes / total < 0.2, `chords and melody share a family ${clashes}/${total}`);
-  const synthShare = parts.filter((x) => voiceById[x.part.d.voice]?.synth).length / parts.length;
-  assert.ok(synthShare < 0.15, `synth voices ${synthShare}`);
+  const core = parts.filter((x) => CORE_ROLES.includes(x.role)); // the extra layers are mostly synths by design
+  const synthShare = core.filter((x) => voiceById[x.part.d.voice]?.synth).length / core.length;
+  assert.ok(synthShare < 0.2, `synth voices ${synthShare}`);
 });
 
 test('takeover: a device that gains a role continues the announced part, then decides from that history', () => {
@@ -287,13 +294,36 @@ test('takeover: a device that gains a role continues the announced part, then de
   assert.ok(next.d);
 });
 
+test('drums keep a groove inside a section and change busyness when the energy changes', () => {
+  // energy 0.15 for two sections, then 0.95: the drums should be lighter first, busier after
+  let t = 0;
+  const rand = rng(11);
+  const parts = [];
+  const e = new Engine({
+    agents: ROLES.map((r) => new Agent(r, lib, rand)), now: () => t, audio: { play() {} },
+    onEvent: (ev) => parts.push(ev),
+    getDirective: (p) => sanitiseDirective({ energy: p < 8 ? 0.15 : 0.95 }),
+  });
+  e.start(structure, 0);
+  for (t = 0; t < 16 * 64 * stepMs(structure.bpm); t += 50) e.tick();
+  const drums = parts.filter((x) => x.role === 'drums' && x.phrase >= 2 && x.phrase < 16);
+  const lvl = (lo, hi) => drums.filter((x) => x.phrase >= lo && x.phrase < hi).map((x) => x.part.d.level);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  assert.ok(mean(lvl(9, 16)) > mean(lvl(2, 8)) + 0.5, `levels ${lvl(2, 8)} -> ${lvl(9, 16)}`);
+  // inside a section (not its first phrase) the loop rarely changes
+  const inside = drums.filter((x) => x.phrase % 4 !== 0);
+  const prev = new Map(drums.map((x) => [x.phrase, x.part.loop?.id]));
+  const changed = inside.filter((x) => prev.has(x.phrase - 1) && prev.get(x.phrase - 1) !== x.part.loop?.id).length;
+  assert.ok(changed <= 3, `drums changed loop ${changed} times inside sections`);
+});
+
 test('packs: every loop is valid and renders in range in any key', async () => {
   const { PACK_LOOPS, PACK_PROGRESSIONS } = await import('../src/packs.js');
   const { validateLoop } = await import('../src/loops.js');
   assert.ok(PACK_LOOPS.length > 1000);
   const counts = {};
   for (const l of PACK_LOOPS) { validateLoop(l); counts[l.role] = (counts[l.role] || 0) + 1; }
-  for (const r of ROLES) assert.ok(counts[r] > 50, `${r}: ${counts[r]}`);
+  for (const r of CORE_ROLES) assert.ok(counts[r] > 50, `${r}: ${counts[r]}`); // the packs are for the core band
   for (const [key, mode, progression] of [['E', 'minor', ['i', 'VI', 'III', 'VII']], ['Bb', 'major', ['I', 'V', 'vi', 'IV']], ['F#', 'minor', ['i', 'iv', 'v', 'i']]]) {
     const s = { key, mode, bpm: 90, progression };
     for (const l of PACK_LOOPS) {
@@ -318,10 +348,10 @@ test('packs: a band using them stays valid, uses them, and keeps a groove for a 
   const { PACK_LOOPS } = await import('../src/packs.js');
   const library = createLibrary({ packs: PACK_LOOPS });
   const parts = simulate({ phrases: 40, seed: 3, library });
-  const late = parts.filter((x) => x.phrase >= 3 && x.part.loop);
+  const late = parts.filter((x) => x.phrase >= 3 && x.part.loop && CORE_ROLES.includes(x.role));
   const fromPacks = late.filter((x) => /groove-|pop909|drolez-/.test(x.part.loop.style)).length / late.length;
   assert.ok(fromPacks > 0.5, `pack share ${fromPacks}`);
-  for (const r of ROLES) assert.ok(new Set(late.filter((x) => x.role === r).map((x) => x.part.loop.id)).size >= 3, `${r} varies`);
+  for (const r of CORE_ROLES) assert.ok(new Set(late.filter((x) => x.role === r).map((x) => x.part.loop.id)).size >= 3, `${r} varies`);
   const drums = late.filter((x) => x.role === 'drums').map((x) => x.part.loop.id);
   const changes = drums.slice(1).filter((id, i) => id !== drums[i]).length;
   assert.ok(changes < drums.length * 0.7, `drum loop changed ${changes} times in ${drums.length} phrases`);

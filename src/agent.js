@@ -17,12 +17,16 @@
 
 import { DENSITIES } from './loops.js';
 import { renderPhrase } from './render.js';
-import { ruleScores, runLength } from './decide/rules.js';
-import { decide, candidateDecisions, pickCandidate, CONTINUITY_BONUS, QUESTIONS } from './decide/select.js';
+import { ruleScores, runLength, SECTION_PHRASES, REGISTERS } from './decide/rules.js';
+import { decide, candidateDecisions, pickCandidate, jevMultipliers, CONTINUITY_BONUS_BY_ROLE, CONTINUITY_HOLD, QUESTIONS } from './decide/select.js';
 import { applyInteraction } from './decide/transform.js';
 import { fitScore, describeFit } from './decide/fit.js';
 import { humanise } from './feel.js';
-import { voiceById } from './voices.js';
+import { voiceById, DEFAULT_VOICE, VOICES } from './voices.js';
+import { applyTransitions, endNotes } from './transitions.js';
+import { HOOK_ROLES } from './hooks.js';
+
+export const HOOK_BONUS = 2; // bass and chords: the hook is strongly preferred, but a clash can still veto it
 
 const LEVEL_NAMES = ['rest', 'sparse', 'medium', 'busy'];
 export const CANDIDATES = 6; // K: how many parts an agent renders and scores before playing one
@@ -35,8 +39,9 @@ const median = (xs) => {
 };
 
 export class Agent {
-  constructor(role, library, random = Math.random, { candidates = CANDIDATES } = {}) {
+  constructor(role, library, random = Math.random, { candidates = CANDIDATES, feel = true } = {}) {
     this.role = role;
+    this.feel = feel; // false (?feel=off): the winner is played straight, for A/B listening only
     this.library = library;
     this.random = random;
     this.candidates = candidates;
@@ -44,6 +49,8 @@ export class Agent {
     this.level = 2;
     this.register = 0;
     this.voice = null; // pinned instrument when auto is off
+    this.pinVoice = null; // an instrument pinned while everything else stays automatic (?voice=, "on piano")
+    this.pinInteraction = null; // 'echo:<role>' / 'answer:<role>' pinned ("melody answer the bass")
     this.prevVoicing = null;
   }
 
@@ -57,27 +64,77 @@ export class Agent {
   renderCandidate(cand, ctx) {
     const { d } = cand;
     if (d.level === 0) return { ...cand, notes: [], loop: null };
-    const loop = this.library.find(this.role, d.style, DENSITIES[d.level - 1], { random: this.random, prefer: cand.prefer });
+    const loop = cand.loopId ? this.library.get(cand.loopId) : this.library.find(this.role, d.style, DENSITIES[d.level - 1], { random: this.random, prefer: cand.prefer });
     if (!loop) return { ...cand, notes: [], loop: null, missing: true };
     const base = renderPhrase(loop, { structure: ctx.structure, phrase: ctx.phrase, register: d.register, prevVoicing: this.prevVoicing });
     const env = { role: this.role, level: d.level, register: d.register, structure: ctx.structure, phrase: ctx.phrase };
     return { ...cand, notes: applyInteraction(base.notes, d.interaction, ctx.peers, env), loop, voicing: base.voicing };
   }
 
+  // The coda after the last outro (form.js END_SECTION): one note on the downbeat, same instrument.
+  endPart(ctx) {
+    const voice = ctx.last?.voice ?? this.voice ?? DEFAULT_VOICE[this.role];
+    const kept = ctx.last?.voice === voice && ctx.last.phrase === ctx.phrase - 1;
+    const d = { level: 1, style: ctx.last?.style ?? 'end', register: 0, interaction: 'none', voice, voiceSince: kept ? ctx.last.voiceSince ?? ctx.last.phrase : ctx.phrase };
+    return { notes: endNotes(this.role, ctx.structure), loop: null, d, p: {}, dist: {}, source: 'form', reasons: [], fit: null, candidates: 1, rank: 1, chance: 1, why: 'the last chord' };
+  }
+
+  // In a hook section, the part's hook loop (hooks.js), if this device has it.
+  hookLoop(ctx) {
+    // A song with sections already fixes every section's notes: nothing to pin. (Improvising also
+    // has per-section chords, but its notes are chosen, so the hook still matters.)
+    if (!HOOK_ROLES.includes(this.role) || !ctx.hookEntry || (ctx.structure?.song && ctx.structure.sections)) return null;
+    return this.library.get?.(ctx.hookEntry.loopId) || null;
+  }
+
   // ctx: from decide/context.js. advice: Jev's answer for this role and phrase, or null.
+  // compose() is prepare() then finish(); the engine may call them apart so that Jev can rank the
+  // candidates in between (Phase 3d). With no ranking the result is exactly compose()'s.
   compose(ctx, advice = null) {
-    const scores = ruleScores(ctx, this.library);
-    const pins = this.auto ? null : { level: this.level, register: this.register, voice: this.voice };
-    const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, pins, this.random);
+    return this.finish(this.prepare(ctx, advice));
+  }
+
+  // Everything up to and including scoring the candidates. Touches no agent state.
+  prepare(ctx, advice = null) {
+    if (ctx.directive?.end) return { final: this.endPart(ctx), ctx, cands: [] };
+    const hookLoop = this.hookLoop(ctx);
+    // In a verse, the melody is scored against the hook too (fit.js continuity), so it relates to it.
+    if (hookLoop && !ctx.hook && this.role === 'melody') {
+      ctx = { ...ctx, hookRef: renderPhrase(hookLoop, { structure: ctx.structure, phrase: ctx.phrase, register: ctx.hookEntry.register }).notes };
+    }
+    const scores = { ...ruleScores(ctx, this.library) };
+    // pinVoice (?voice=<role>:<id>, or "play it on piano") pins only the instrument and
+    // pinInteraction ("melody answer the bass") only the echo/answer; the rest stays automatic.
+    const pins = this.auto ? {} : { level: this.level, register: this.register, voice: this.voice };
+    if (this.pinVoice) pins.voice = this.pinVoice;
+    if (this.pinInteraction) pins.interaction = this.pinInteraction;
+    // An asked-for instrument or pairing applies from the next phrase, even mid-section or when the
+    // rules wouldn't offer it (the rules only change instruments at a section start).
+    if (pins.voice && scores.voice && !(pins.voice in scores.voice) && (VOICES[this.role] || []).some((v) => v.id === pins.voice)) scores.voice = { ...scores.voice, [pins.voice]: 1 };
+    // The same for an asked-for level or register: the section's plan caps busyness ("the verse
+    // has no resting drums"), but "take out the drums" or "busier" must still happen.
+    if (pins.level != null && scores.level && !(pins.level in scores.level)) scores.level = { ...scores.level, [pins.level]: 1 };
+    if (pins.register != null && scores.register && !(pins.register in scores.register) && (REGISTERS[this.role] || [0]).includes(pins.register)) scores.register = { ...scores.register, [pins.register]: 1 };
+    const target = pins.interaction?.split(':')[1];
+    if (target && scores.interaction && !(pins.interaction in scores.interaction) && ctx.peers?.[target]?.notes?.length) scores.interaction = { ...scores.interaction, [pins.interaction]: 1 };
+    const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, Object.keys(pins).length ? pins : null, this.random);
     const source = usedJev ? `rules + ${advice.source}` : 'rules';
 
+    // The first time a hook is played it will be repeated in every chorus: look twice as hard, and
+    // take the best fit rather than a sample (below).
+    const choosingHook = ctx.hook && HOOK_ROLES.includes(this.role) && !ctx.hookEntry;
     const drawn = candidateDecisions(dist, sampled, {
       pins,
       last: ctx.last,
       prefer: this.lastLoopId,
-      k: this.candidates,
+      k: choosingHook ? this.candidates * 2 : this.candidates,
       random: this.random,
     });
+    // A hook section: the hook goes in first, as it was first played.
+    if (hookLoop && ctx.hook && this.auto) { // (not when someone pinned how busy/high it plays)
+      const hd = { ...sampled, level: DENSITIES.indexOf(hookLoop.density) + 1, style: hookLoop.style, register: ctx.hookEntry.register, interaction: 'none' };
+      drawn.unshift({ d: hd, kind: 'hook', loopId: hookLoop.id });
+    }
     const cands = drawn.map((c) => this.renderCandidate(c, ctx));
     for (const c of cands) {
       if (c.notes.length) c.fit = fitScore(c.notes, { role: this.role, ctx, d: c.d });
@@ -85,15 +142,40 @@ export class Agent {
     // A part with no notes is neither a good nor a bad fit, so it takes the middle of what the
     // others scored: resting stays as likely as the rules think it should be.
     const neutral = median(cands.filter((c) => c.fit).map((c) => c.fit.total)) ?? 0.5;
+    // Keep the groove for the section: a candidate that replays exactly last phrase's loop gets a
+    // role-specific bonus (step A5), except on the first phrase of a director section, where the
+    // band is free to change. Depends only on the phrase number, so every device agrees.
+    // Chords and melody only get it while the pattern is still new (held < 3 phrases), as before.
     const held = runLength(ctx.history, 'style');
+    const fresh = held < (CONTINUITY_HOLD[this.role] ?? Infinity);
+    const newSection = ctx.phrase % SECTION_PHRASES === 0 || !!ctx.directive?.isFirstPhrase;
+    const bonus = newSection || !fresh ? 0 : CONTINUITY_BONUS_BY_ROLE[this.role] ?? 0;
     for (const c of cands) {
       c.fit ||= { total: neutral, terms: {} };
-      c.bonus = c.kind === 'continuity' && held < 3 ? CONTINUITY_BONUS : 0; // keep a new groove
+      c.bonus = (c.loop && c.loop.id === this.lastLoopId ? bonus : 0) + (c.kind === 'hook' ? HOOK_BONUS : 0);
     }
+    return { ctx, scores, dist, source, cands, choosingHook };
+  }
 
-    const { index, probs } = pickCandidate(cands, { dist, random: this.random });
+  // Pick one candidate (with Jev's ranking, { byKey: { candidateKey: p }, source }, if any), then
+  // arrange and humanise it, and update the agent's state.
+  finish(prep, { jev = null } = {}) {
+    if (prep.final) return prep.final;
+    const { ctx, scores, dist, cands, choosingHook } = prep;
+    let { source } = prep;
+    const extra = jevMultipliers(cands, jev?.byKey);
+    if (extra) source += ` · ranked by ${jev.source ?? 'jev'}`;
+    const picked = pickCandidate(cands, { dist, random: this.random, extra });
+    // The melody's hook wins outright: the chorus is the chorus.
+    const hookIndex = cands.findIndex((c) => c.kind === 'hook' && c.notes.length);
+    const best = cands.reduce((b, c, i) => (c.notes.length && (b < 0 || c.fit.total > cands[b].fit.total) ? i : b), -1);
+    const index = this.role === 'melody' && hookIndex >= 0 ? hookIndex : choosingHook && best >= 0 ? best : picked.index;
+    const probs = picked.probs;
     const win = cands[index];
-    const d = win.d;
+    // The phrase this instrument started, carried in the shared score so every device can tell
+    // how long each part has held its instrument (rules.js voiceTurn).
+    const kept = ctx.last?.voice === win.d.voice && ctx.last.phrase === ctx.phrase - 1;
+    const d = { ...win.d, voiceSince: kept ? ctx.last.voiceSince ?? ctx.last.phrase : ctx.phrase };
     if (this.auto) {
       this.level = d.level;
       this.register = d.register;
@@ -106,15 +188,21 @@ export class Agent {
     for (const q of QUESTIONS) if (dist[q]) p[q] = dist[q][String(d[q])] ?? 1;
     const reasons = scores.reasons.filter((r) => !r.when || r.when(d)).map((r) => r.text);
     const rank = 1 + cands.filter((c) => c.fit.total > win.fit.total).length;
-    const meta = { d, p, dist, source, reasons, fit: win.fit, candidates: cands.length, rank, chance: probs[index] };
+    // Which other parts this decision heard for the same phrase (not last phrase's): Phase 6.
+    const fresh = Object.entries(ctx.peers || {}).filter(([, x]) => x && x.phrase === ctx.phrase).map(([r]) => r);
+    const meta = { d, p, dist, source, reasons, fit: win.fit, candidates: cands.length, rank, chance: probs[index], fresh };
 
-    if (!win.notes.length) {
+    // The seams between sections (transitions.js): fills, crash, riser, the breakdown's drop.
+    // a part someone told to rest stays silent: no crash, fill or riser either
+    const rested = !this.auto && this.level === 0;
+    const arranged = rested ? [] : applyTransitions(win.notes, { role: this.role, dir: ctx.directive, structure: ctx.structure, phrase: ctx.phrase });
+    if (!arranged.length) {
       const why = d.level === 0 ? `resting${reasons[0] ? ` (${reasons[0]})` : ''}` : `no "${d.style}" pattern in my library`;
       return { notes: [], ...meta, why };
     }
     // Last step: the groove. Deterministic from (seed, phrase, role, note), so the device that
     // takes this part over or doubles it plays the same performance, down to the millisecond.
-    const notes = humanise(win.notes, {
+    const notes = !this.feel ? arranged : humanise(arranged, {
       role: this.role,
       phrase: ctx.phrase,
       seed: ctx.structure.seed,
@@ -125,6 +213,7 @@ export class Agent {
     const bits = [voiceById[d.voice]?.label ?? d.voice, d.style.replace(/^groove-/, '').replace(/^drolez-/, ''), LEVEL_NAMES[d.level]];
     if (d.register) bits.push(d.register > 0 ? 'high' : 'low');
     if (d.interaction !== 'none') bits.push(d.interaction.replace('echo:', 'echoes ').replace('answer:', 'answers '));
+    if (win.kind === 'hook') bits.push('the hook');
     if (cands.length > 1) bits.push(describeFit(win.fit, cands.length));
     return { notes, loop: win.loop, ...meta, why: bits.join(' · ') };
   }

@@ -1,0 +1,45 @@
+Murmuration music QA · 40 phrases · rng "qa" · seeds durhack, pop1, pop2, pop3, pop4
+(loop/voice changes count only consecutive phrases where the part plays in both)
+
+== durhack: Bb minor · 89 bpm · v VI v i · swing 0.018 (471 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.82  29/38         5/38           rhythm 0.86, drums 0.80, continuity 0.80
+bass      0.91  17/38         2/38           harmony 1.00, bassRoot 0.99, clash 0.93, register 1.00, rhythm 0.82, shape 0.66, continuity 0.66
+chords    0.89  18/39         8/39           clash 0.95, register 1.00, rhythm 0.96, continuity 0.46
+melody    0.90  14/37         4/37           harmony 0.96, clash 0.88, register 1.00, rhythm 0.99, shape 0.97, continuity 0.28
+
+== pop1: B major · 84 bpm · vi IV iii V (346 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.80  17/38         5/38           rhythm 0.85, drums 0.83, continuity 0.60
+bass      0.88  16/38         2/38           harmony 1.00, bassRoot 1.00, clash 0.90, register 1.00, rhythm 0.78, shape 0.54, continuity 0.67
+chords    0.92  20/39         7/39           clash 0.94, register 1.00, rhythm 0.98, continuity 0.67
+melody    0.86  16/37         4/37           harmony 0.91, clash 0.84, register 1.00, rhythm 0.99, shape 0.80, continuity 0.34
+
+== pop2: F# major · 93 bpm · V IV vi I · swing 0.027 (298 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.80  22/38         3/38           rhythm 0.86, drums 0.78, continuity 0.69
+bass      0.91  16/38         5/38           harmony 1.00, bassRoot 1.00, clash 0.99, register 1.00, rhythm 0.82, shape 0.64, continuity 0.59
+chords    0.92  17/39         8/39           clash 0.96, register 1.00, rhythm 0.98, continuity 0.63
+melody    0.87  11/37         7/37           harmony 0.90, clash 0.97, register 1.00, rhythm 0.97, shape 0.69, continuity 0.33
+
+== pop3: F major · 105 bpm · I vi I IV · swing 0.058 (286 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.84  24/38         5/38           rhythm 0.85, drums 0.85, continuity 0.76
+bass      0.90  16/38         5/38           harmony 1.00, bassRoot 1.00, clash 1.00, register 0.95, rhythm 0.79, shape 0.56, continuity 0.64
+chords    0.90  21/39         5/39           clash 0.94, register 0.95, rhythm 0.97, continuity 0.66
+melody    0.88  11/37         7/37           harmony 0.90, clash 0.94, register 1.00, rhythm 0.97, shape 0.81, continuity 0.36
+
+== pop4: F# minor · 87 bpm · VI VII i VII · swing 0.031 (298 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.81  22/38         7/38           rhythm 0.88, drums 0.81, continuity 0.66
+bass      0.90  15/38         5/38           harmony 1.00, bassRoot 0.99, clash 0.98, register 0.87, rhythm 0.87, shape 0.63, continuity 0.66
+chords    0.87  17/39         9/39           clash 0.96, register 0.90, rhythm 0.98, continuity 0.41
+melody    0.87  15/37         5/37           harmony 0.83, clash 0.93, register 1.00, rhythm 0.99, shape 0.86, continuity 0.33
+
+== all seeds
+role       fit  loop changes  voice changes  terms
+drums     0.81  114/190       25/190         rhythm 0.86, drums 0.82, continuity 0.70
+bass      0.90  80/190        19/190         harmony 1.00, bassRoot 1.00, clash 0.96, register 0.96, rhythm 0.82, shape 0.61, continuity 0.65
+chords    0.90  93/195        37/195         clash 0.95, register 0.97, rhythm 0.97, continuity 0.57
+melody    0.87  67/185        27/185         harmony 0.90, clash 0.91, register 1.00, rhythm 0.98, shape 0.83, continuity 0.33
+band fit 0.87 · melody continuity 0.33

@@ -11,7 +11,7 @@
 //   one character per 16th, x = hit, X = accented hit, '.' = nothing. A single bar repeats over the loop.
 
 import { toRelativeLoop } from '../midi-import.js';
-import { DENSITIES } from '../loops.js';
+import { DENSITIES, ROLES, kindOf } from '../loops.js';
 import { renderPhrase } from '../render.js';
 
 const NOTE = /^([A-G])(#|b)?(-?\d)$/;
@@ -71,19 +71,21 @@ function thinned(events) {
   });
 }
 
-function compilePart(song, role, density, spec) {
-  const where = `${song.id}: ${role} (${density})`;
-  const id = `${role}/song-${song.id}/${density}`;
-  const meta = { id, role, style: `song-${song.id}`, density, key: song.key, mode: song.mode, progression: song.progression };
-  if (role === 'drums') {
+function compilePart(song, role, density, spec, section = null) {
+  const style = section ? `song-${song.id}-${section.name}` : `song-${song.id}`;
+  const where = `${song.id}: ${section ? `${section.name} ` : ''}${role} (${density})`;
+  const id = `${role}/${style}/${density}`;
+  const progression = section?.progression ?? song.progression;
+  const meta = { id, role, style, density, key: song.key, mode: song.mode, progression };
+  if (kindOf(role) === 'drums') {
     const { events, bars } = parseDrums(spec, where);
     return { ...meta, bars: fit(bars, where), events };
   }
   const { events, bars } = typeof spec === 'string' ? parseLine(spec, where) : spec;
   const raw = events.map((e) => ({ midi: e.hit ? 60 : e.midi, ticks: e.bar * 16 + e.step, durationTicks: e.dur, velocity: velocity(e) }));
   const loop = toRelativeLoop(raw, 4, { ...meta, bars: fit(bars, where) });
-  if (role === 'chords') loop.voicing = song.voicing ?? 3;
-  else keepInRange(loop, song);
+  if (kindOf(role) === 'chords') loop.voicing = role === 'pad' ? song.padVoicing ?? 4 : song.voicing ?? 3;
+  else keepInRange(loop, { ...song, progression });
   return loop;
 }
 
@@ -96,7 +98,7 @@ function keepInRange(loop, song) {
     for (let phrase = 0; phrase < Math.max(1, loop.bars / 4); phrase++) out.push(...renderPhrase(loop, { structure, phrase, fold: false }).notes.map((n) => n.midi));
     return out;
   };
-  const [lo, hi] = loop.role === 'bass' ? [28, 64] : [48, 96];
+  const [lo, hi] = kindOf(loop.role) === 'bass' ? [28, 64] : [48, 96];
   for (let i = 0; i < 3; i++) {
     const p = pitches();
     const shift = Math.min(...p) < lo ? 1 : Math.max(...p) > hi ? -1 : 0;
@@ -110,24 +112,74 @@ function fit(bars, where) {
   return bars;
 }
 
+// One role's versions -> a loop per density. With `allSame` (sections) a single version is used for
+// every density as written, so a song section always sounds the way it was written.
+function compileVersions(def, role, versions, section) {
+  const loops = [];
+  const single = typeof versions === 'string' || (kindOf(role) === 'drums' && !DENSITIES.some((d) => versions[d]));
+  if (single) {
+    for (const d of DENSITIES) loops.push(compilePart(def, role, d, versions, section));
+    return loops;
+  }
+  const given = Object.fromEntries(DENSITIES.filter((d) => versions[d]).map((d) => [d, versions[d]]));
+  if (!Object.keys(given).length) throw new Error(`${def.id}: ${section ? `${section.name} ` : ''}${role} needs at least one of sparse / medium / busy`);
+  for (const d of DENSITIES) {
+    let spec = given[d];
+    if (!spec && d === 'sparse' && kindOf(role) !== 'drums' && !section) {
+      const base = given.medium || given.busy;
+      const parsed = typeof base === 'string' ? parseLine(base, `${def.id}: ${role}`) : base;
+      spec = { events: thinned(parsed.events), bars: parsed.bars };
+    }
+    spec ??= given.medium || given.busy || given.sparse;
+    loops.push(compilePart(def, role, d, spec, section));
+  }
+  return loops;
+}
+
+const ROLE_NAMES = ROLES;
+
+// Songs with sections (step E): `sections` { name: { progression, hook?, energy?, plan?, parts } }
+// and `form` [[name, phrases], ...]. Each section's parts compile to loops of style
+// song-<id>-<section>; a role missing from a section rests in it. `end: true` ends the song after
+// the form instead of going round again.
+function compileSections(def) {
+  if (!Array.isArray(def.form) || !def.form.length) throw new Error(`${def.id}: a song with sections needs a "form": [['intro', 1], ...]`);
+  const loops = [];
+  const sections = {};
+  for (const [name, sec] of Object.entries(def.sections)) {
+    if (!/^[a-z][a-zA-Z0-9]*$/.test(name)) throw new Error(`${def.id}: section name "${name}" must be letters and digits`);
+    const progression = sec.progression ?? def.progression;
+    if (!progression || ![4, 8].includes(progression.length)) throw new Error(`${def.id}: section ${name} needs a progression of 4 or 8 chords`);
+    for (const r of Object.keys(sec.parts || {})) if (!ROLE_NAMES.includes(r)) throw new Error(`${def.id}: section ${name} has an unknown part "${r}"`);
+    sections[name] = { name, progression, hook: !!sec.hook, energy: sec.energy, plan: sec.plan, transitionIn: sec.transitionIn, roles: Object.keys(sec.parts || {}) };
+    for (const [role, versions] of Object.entries(sec.parts || {})) loops.push(...compileVersions(def, role, versions, sections[name]));
+  }
+  for (const [name, phrases] of def.form) {
+    if (!sections[name]) throw new Error(`${def.id}: the form uses section "${name}", which is not in "sections"`);
+    if (!Number.isInteger(phrases) || phrases < 1) throw new Error(`${def.id}: section ${name} in the form needs a whole number of phrases`);
+  }
+  return { loops, sections };
+}
+
 // song definition -> { ...song, loops }
 export function compileSong(def) {
+  if (def.sections) {
+    if (!Array.isArray(def.form) || !def.form.length) throw new Error(`${def.id}: a song with sections needs a "form": [['intro', 1], ...]`);
+    const first = def.sections[def.form[0][0]];
+    def = { ...def, progression: def.progression ?? first?.progression, parts: def.parts ?? {} };
+  }
   for (const k of ['id', 'title', 'key', 'mode', 'bpm', 'progression', 'parts']) if (def[k] == null) throw new Error(`song is missing "${k}"`);
-  if (![4, 8].includes(def.progression.length)) throw new Error(`${def.id}: progression needs 4 or 8 chords (one per bar)`);
+  // (a song with sections checks each section's progression instead)
+  if (!def.sections && ![4, 8].includes(def.progression.length)) throw new Error(`${def.id}: progression needs 4 or 8 chords (one per bar)`);
+  if (def.sections) {
+    const { loops, sections } = compileSections(def);
+    return { ...def, loops, compiledSections: sections };
+  }
   const loops = [];
   for (const [role, versions] of Object.entries(def.parts)) {
     const given = Object.fromEntries(DENSITIES.filter((d) => versions[d]).map((d) => [d, versions[d]]));
     if (!Object.keys(given).length) throw new Error(`${def.id}: ${role} needs at least one of sparse / medium / busy`);
-    for (const d of DENSITIES) {
-      let spec = given[d];
-      if (!spec && d === 'sparse' && role !== 'drums') {
-        const base = given.medium || given.busy;
-        const parsed = typeof base === 'string' ? parseLine(base, `${def.id}: ${role}`) : base;
-        spec = { events: thinned(parsed.events), bars: parsed.bars };
-      }
-      spec ??= given.medium || given.busy || given.sparse;
-      loops.push(compilePart(def, role, d, spec));
-    }
+    loops.push(...compileVersions(def, role, versions, null));
   }
   return { ...def, loops };
 }

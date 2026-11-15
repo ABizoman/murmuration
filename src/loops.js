@@ -14,7 +14,14 @@
 //
 // Imported MIDI pack loops are converted into this same shape (midi-import.js).
 
-export const ROLES = ['drums', 'bass', 'chords', 'melody'];
+// The parts. The first four are the core band; pad, arp and perc are the extra layers a bigger
+// swarm adds (round 2, step 2), each claimable by its own device. Every part is one of four
+// *kinds*, which decides how its loops are written and rendered: pad plays like chords (held
+// voicings), arp like a melody (single notes), perc like drums (hits).
+export const ROLES = ['drums', 'bass', 'chords', 'melody', 'pad', 'arp', 'perc'];
+export const CORE_ROLES = ['drums', 'bass', 'chords', 'melody'];
+export const ROLE_KIND = { drums: 'drums', bass: 'bass', chords: 'chords', melody: 'melody', pad: 'chords', arp: 'melody', perc: 'drums' };
+export const kindOf = (role) => ROLE_KIND[role] ?? role;
 export const DENSITIES = ['sparse', 'medium', 'busy'];
 
 // [bar, step, dur, deg, vel]
@@ -57,6 +64,11 @@ add('bass', 'pulse', 'sparse', 1, P([[0, 0, 3, 0, 0.85], [0, 8, 3, 0, 0.7]]));
 add('bass', 'pulse', 'medium', 1, P(eighths.map((s, i) => [0, s, 1, 0, i % 2 ? 0.55 : 0.85])));
 add('bass', 'pulse', 'busy', 1, P(eighths.map((s, i) => [0, s, 1, [0, 7, 0, 7, 0, 7, 4, 2][i], i % 2 ? 0.6 : 0.9])));
 
+// Dance (step "dance" family): the house bass bounces on the off-beats, the kick takes the beats.
+add('bass', 'offbeat', 'sparse', 1, P([[0, 2, 2, 0, 0.8], [0, 10, 2, 0, 0.75]]), { energy: 0.45 });
+add('bass', 'offbeat', 'medium', 1, P([[0, 2, 2, 0, 0.85], [0, 6, 2, 0, 0.7], [0, 10, 2, 0, 0.85], [0, 14, 2, 0, 0.7]]), { energy: 0.6 });
+add('bass', 'offbeat', 'busy', 1, P([[0, 2, 2, 0, 0.85], [0, 6, 2, 7, 0.7], [0, 10, 2, 0, 0.85], [0, 14, 2, 7, 0.7]]), { energy: 0.75 });
+
 // --- Chords -----------------------------------------------------------------
 add('chords', 'pad', 'sparse', 1, R([[0, 0, 16, 0.5]]), { voicing: 4 });
 add('chords', 'pad', 'medium', 1, R([[0, 0, 8, 0.6], [0, 8, 8, 0.45]]), { voicing: 4 });
@@ -65,6 +77,66 @@ add('chords', 'pad', 'busy', 1, R([[0, 0, 6, 0.6], [0, 6, 4, 0.45], [0, 10, 6, 0
 add('chords', 'stabs', 'sparse', 1, R([[0, 0, 3, 0.75]]), { voicing: 3 });
 add('chords', 'stabs', 'medium', 1, R([[0, 0, 3, 0.8], [0, 6, 2, 0.6], [0, 10, 3, 0.7]]), { voicing: 3 });
 add('chords', 'stabs', 'busy', 1, R([[0, 0, 2, 0.8], [0, 3, 2, 0.55], [0, 6, 2, 0.7], [0, 10, 2, 0.6], [0, 14, 2, 0.5]]), { voicing: 3 });
+
+// --- Pad (held chords under everything) -------------------------------------
+// One chord per bar at most: a held note must never ring on into the next chord.
+add('pad', 'wash', 'sparse', 1, R([[0, 0, 16, 0.42]]), { voicing: 3, energy: 0.3 });
+add('pad', 'wash', 'medium', 1, R([[0, 0, 16, 0.5]]), { voicing: 4, energy: 0.45 });
+add('pad', 'wash', 'busy', 1, R([[0, 0, 8, 0.55], [0, 8, 8, 0.45]]), { voicing: 4, energy: 0.6 });
+add('pad', 'swell', 'sparse', 1, R([[0, 2, 14, 0.4]]), { voicing: 3, energy: 0.3 });
+add('pad', 'swell', 'medium', 1, R([[0, 2, 14, 0.45]]), { voicing: 4, energy: 0.4 });
+add('pad', 'swell', 'busy', 1, R([[0, 0, 6, 0.5], [0, 6, 10, 0.4]]), { voicing: 4, energy: 0.55 });
+
+// --- Arp (quick chord notes, up and down) -------------------------------------
+// [step, degree] per bar; 0 = root, 2 = third, 4 = fifth, 7 = octave
+const ARPS = {
+  up8: [[0, 0], [2, 2], [4, 4], [6, 7], [8, 0], [10, 2], [12, 4], [14, 7]],
+  updown8: [[0, 0], [2, 2], [4, 4], [6, 7], [8, 4], [10, 2], [12, 0], [14, 2]],
+  up16: [...Array(16).keys()].map((s) => [s, [0, 2, 4, 7][s % 4]]),
+  bounce16: [...Array(16).keys()].map((s) => [s, [0, 7, 4, 7, 2, 7, 4, 7][s % 8]]),
+  sparse: [[0, 0], [3, 4], [6, 7], [10, 4], [12, 2]],
+};
+const arp = (name, vel = 0.6) => P(ARPS[name].map(([step, deg]) => [0, step, step % 2 ? 1 : 2, deg, step % 4 === 0 ? vel + 0.1 : vel]));
+add('arp', 'arp', 'sparse', 1, arp('sparse', 0.55), { energy: 0.4 });
+add('arp', 'arp', 'medium', 1, arp('up8'), { energy: 0.55 });
+add('arp', 'arp', 'busy', 1, arp('up16', 0.5), { energy: 0.75 });
+add('arp', 'bounce', 'sparse', 1, P([[0, 0, 2, 0, 0.55], [0, 6, 2, 7, 0.5], [0, 12, 2, 4, 0.5]]), { energy: 0.4 });
+add('arp', 'bounce', 'medium', 1, arp('updown8'), { energy: 0.55 });
+add('arp', 'bounce', 'busy', 1, arp('bounce16', 0.5), { energy: 0.8 });
+
+// --- Perc (shaker and tambourine over the drums) ------------------------------
+add('perc', 'shaker', 'sparse', 1, D({ shaker: [2, 6, 10, 14] }), { energy: 0.4 });
+add('perc', 'shaker', 'medium', 1, D({ shaker: eighths }, { soft: [] }), { energy: 0.55 });
+add('perc', 'shaker', 'busy', 1, D({ shaker: all16, tamb: [4, 12] }), { energy: 0.8 });
+add('perc', 'tamb', 'sparse', 1, D({ tamb: [4, 12] }), { energy: 0.45 });
+add('perc', 'tamb', 'medium', 1, D({ tamb: [4, 12], shaker: [2, 6, 10, 14] }), { energy: 0.6 });
+add('perc', 'tamb', 'busy', 1, D({ tamb: [2, 4, 6, 10, 12, 14], shaker: eighths }), { energy: 0.8 });
+
+// --- Melody: riffs (dance). Chord notes only (root, third, fifth, octave), repeated over the
+// chords: a small range and a lot of repetition, like a dance-floor hook. Generated (below) from a
+// set of syncopated rhythms and note shapes, so the band has a few dozen to choose from; the hook
+// book (hooks.js) then keeps one riff for the whole song.
+const RIFF_RHYTHMS = [
+  [0, 3, 6, 10, 13], [0, 3, 6, 8, 11, 14], [0, 2, 4, 7, 10, 12], [2, 6, 10, 14], [0, 3, 6, 10, 12, 14],
+  [0, 4, 6, 10, 14], [1, 4, 7, 10, 13], [0, 2, 6, 8, 11], [0, 3, 8, 11], [0, 6, 8, 14], [2, 4, 8, 10, 13], [0, 3, 6, 9, 12],
+];
+const RIFF_SHAPES = [[0, 2, 4, 2, 0, 4], [4, 2, 0, 2, 4, 7], [0, 4, 7, 4, 2, 0], [7, 4, 2, 4, 7, 4], [2, 4, 2, 0, 2, 4]];
+RIFF_RHYTHMS.forEach((steps, ri) => {
+  RIFF_SHAPES.forEach((shape, si) => {
+    if ((ri + si) % 2) return; // 30 riffs: every other combination
+    const rows = [];
+    for (let bar = 0; bar < 2; bar++) {
+      steps.forEach((step, k) => {
+        const next = steps[k + 1] ?? 16;
+        // bar 2 answers bar 1: the same rhythm, the last note goes somewhere else
+        const deg = bar === 1 && k === steps.length - 1 ? shape[(k + 2) % shape.length] : shape[k % shape.length];
+        rows.push([bar, step, Math.max(1, Math.min(3, next - step)), deg, k === 0 ? 0.82 : step % 4 === 0 ? 0.72 : 0.64]);
+      });
+    }
+    const density = steps.length <= 4 ? 'sparse' : steps.length <= 5 ? 'medium' : 'busy';
+    L.push({ id: `melody/riff/${density}/${ri}-${si}`, role: 'melody', style: 'riff', density, bars: 2, events: P(rows), energy: { sparse: 0.35, medium: 0.55, busy: 0.75 }[density] });
+  });
+});
 
 // --- Melody (4 bars: question in bars 0-1, answer in bars 2-3) ---------------
 add('melody', 'motif', 'sparse', 4, P([
@@ -113,6 +185,7 @@ export function createLibrary({ packs = [], builtins = true } = {}) {
       loops.push(loop);
     },
     styles: (role) => [...new Set(loops.filter((l) => l.role === role).map((l) => l.style))],
+    get: (id) => loops.find((l) => l.id === id) || null, // the exact loop, for hooks
     // Average energy of a style's loops (pack loops carry one), or null.
     styleEnergy(role, style) {
       const e = byStyle(role, style).map((l) => l.energy).filter((x) => typeof x === 'number');

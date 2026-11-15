@@ -20,6 +20,7 @@ export function summarise(part, role, phrase) {
     register: d.register ?? 0,
     interaction: d.interaction ?? 'none',
     voice: d.voice ?? null,
+    voiceSince: Number.isInteger(d.voiceSince) ? d.voiceSince : null, // the phrase this instrument started
     density: notes.length / 4, // notes per bar
     meanPitch: pitches.length ? pitches.reduce((a, b) => a + b, 0) / pitches.length : null,
     onsets,
@@ -28,7 +29,7 @@ export function summarise(part, role, phrase) {
 }
 
 // lookup(phrase, role) -> part or null
-export function buildContext({ role, phrase, structure, roles, lookup, directive }) {
+export function buildContext({ role, phrase, structure, roles, lookup, directive, prevDirective = null, hookEntry = null }) {
   const peers = {};
   for (const r of roles) {
     if (r === role) continue;
@@ -38,7 +39,9 @@ export function buildContext({ role, phrase, structure, roles, lookup, directive
   // What the others played last phrase only (not what they just decided for this one).
   const before = {};
   for (const r of roles) if (r !== role) before[r] = summarise(lookup(phrase - 1, r), r, phrase - 1);
-  return { role, phrase, structure, peers, before, last: history[0] || null, history, directive };
+  // Hook sections (form.js): fit.js aims for near-identical continuity, agent.js pins the hook loop.
+  const hook = !!directive?.hook;
+  return { role, phrase, structure, peers, before, last: history[0] || null, history, directive, prevDirective, hook, section: directive?.section ?? null, hookEntry };
 }
 
 // 16 characters per bar: x = something starts on that 16th, . = nothing.

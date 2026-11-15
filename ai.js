@@ -2,6 +2,8 @@
 //
 //   POST /decide  { state, questions }  -> { answers: { id: { option: probability } }, source }
 //   POST /direct  { state }             -> { directive, source }
+//   POST /instruct { state, questions } -> { answers, source }  (a typed instruction, as choice
+//                                          questions: src/ui/interpret.js; Jev, else Gemini)
 //
 // Environment:
 //   JEV_API_KEY        use the real Jev model: a TypeSafe key, or an OpenRouter key (sk-or-...)
@@ -92,9 +94,20 @@ async function decideStandIn(state, questions) {
   return { answers, source: 'jev stand-in' };
 }
 
+// A rejected key (expired, revoked: 401/403) won't start working mid-demo: after the first refusal
+// the stand-in answers instead, so the band keeps getting advice and the log stays quiet.
+let jevKeyRejected = false;
 export async function decide({ state, questions }) {
   if (typeof state !== 'string' || !questions || typeof questions !== 'object') throw new Error('bad request');
-  if (process.env.JEV_API_KEY) return decideReal(state.slice(0, 20000), questions);
+  if (process.env.JEV_API_KEY && !jevKeyRejected) {
+    try {
+      return await decideReal(state.slice(0, 20000), questions);
+    } catch (err) {
+      if (!/\b(401|403)\b/.test(String(err.message))) throw err;
+      jevKeyRejected = true;
+      console.log(`  Jev refused the key (${String(err.message).slice(0, 80)}): using the stand-in from now on. Get a new JEV_API_KEY and restart.`);
+    }
+  }
   return decideStandIn(state, questions);
 }
 
@@ -196,4 +209,57 @@ export async function direct({ state }) {
   if (typeof state !== 'string') throw new Error('bad request');
   if (process.env.GEMINI_API_KEY) return directReal(state);
   return directStandIn(state);
+}
+
+// ---- /instruct -----------------------------------------------------------------------------
+// A typed instruction the rules didn't understand, as choice questions (src/ui/interpret.js).
+// Jev answers choice questions natively; Gemini picks one option per question as JSON. No key (or
+// both refuse): an error, and the phone says it didn't catch that -- never a random stand-in.
+async function instructGemini(state, questions) {
+  const ids = Object.keys(questions);
+  const schema = { type: 'object', properties: Object.fromEntries(ids.map((id) => [id, { type: 'string', enum: Object.keys(questions[id].criteria) }])), required: ids };
+  const lines = ids.map((id) => `${id}: ${questions[id].instructions}\n${Object.entries(questions[id].criteria).map(([k, v]) => `  ${k} = ${v}`).join('\n')}`);
+  const input = `${state}\n\nAnswer every question with exactly one option key. Reply with ONLY a JSON object {question: option key}.\n\n${lines.join('\n\n')}`;
+  const errors = [];
+  for (const model of DIRECTOR_MODELS) {
+    try {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY.trim(), 'Api-Revision': '2026-05-20' },
+        body: JSON.stringify({ model, input, response_format: { type: 'text', mime_type: 'application/json', schema }, store: false }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`${model} answered ${res.status}`);
+      const text = geminiText(await res.json());
+      const picked = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+      const answers = {};
+      for (const id of ids) if (picked[id] in questions[id].criteria) answers[id] = { [picked[id]]: 1 };
+      if (Object.keys(answers).length) return { answers, source: model };
+      throw new Error(`${model}: no usable answer`);
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  throw new Error(`Gemini: ${errors.join(' | ')}`);
+}
+
+export async function instruct({ state, questions }) {
+  if (typeof state !== 'string' || !questions || typeof questions !== 'object') throw new Error('bad request');
+  const errors = [];
+  if (process.env.JEV_API_KEY && !jevKeyRejected) {
+    try {
+      return await decideReal(state.slice(0, 20000), questions);
+    } catch (err) {
+      errors.push(err.message);
+      if (/\b(401|403)\b/.test(String(err.message))) jevKeyRejected = true;
+    }
+  }
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await instructGemini(state.slice(0, 8000), questions);
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  throw new Error(errors.length ? errors.join(' | ').slice(0, 300) : 'no AI key (set JEV_API_KEY or GEMINI_API_KEY)');
 }

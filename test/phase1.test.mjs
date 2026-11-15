@@ -31,7 +31,7 @@ test('degrees map to chord tones and scale tones', () => {
 test('seed only gives structure, deterministically', () => {
   const a = structureFromSeed('durhack'), b = structureFromSeed('durhack');
   assert.deepEqual(a, b);
-  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'key', 'mode', 'mood', 'progression', 'seed', 'swing']);
+  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'family', 'form', 'key', 'mode', 'mood', 'progression', 'sections', 'seed', 'swing']);
   const keys = new Set(Array.from({ length: 200 }, (_, i) => structureFromSeed(`s${i}`).key));
   assert.ok(keys.size >= 10, 'seeds spread over keys');
   // Swing is shared timing: a number in the upbeat-pop range for every seed, never undefined.
@@ -152,7 +152,7 @@ test('arrangement: chords first, then drums and bass, then melody', () => {
   const lib = createLibrary();
   const e = new Engine({ agents: ROLES.map((r) => new Agent(r, lib, () => 0.5)), now: () => t, audio: { play() {} } });
   e.start({ key: 'C', mode: 'major', bpm: 90, progression: ['I', 'V', 'vi', 'IV'] }, 0);
-  const playing = (p) => Object.entries(e.ensureParts(p).local).filter(([, part]) => part.notes.length).map(([r]) => r).sort();
+  const playing = (p) => Object.entries(e.ensureParts(p).local).filter(([r, part]) => part.notes.length && ['drums', 'bass', 'chords', 'melody'].includes(r)).map(([r]) => r).sort();
   assert.deepEqual(playing(0), ['chords']);
   assert.deepEqual(playing(1), ['bass', 'chords', 'drums']);
   assert.deepEqual(playing(2), ['bass', 'chords', 'drums', 'melody']);

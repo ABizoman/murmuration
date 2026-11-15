@@ -11,7 +11,8 @@
 
 import { ROLES } from '../loops.js';
 
-export const ROLE_PRIORITY = ['chords', 'drums', 'bass', 'melody'];
+// Who gets a device first: the core band, then the extra layers (round 2, step 2).
+export const ROLE_PRIORITY = ['chords', 'drums', 'bass', 'melody', 'pad', 'arp', 'perc'];
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -44,10 +45,12 @@ export function rendezvous(key, ids) {
 }
 
 // What should `me` claim, given everyone's claims? Returns a role or null (spare).
-export function nextClaim(me, claims) {
+// prefer (optional, ?part=<role>): the part this device would like, if nobody owns it yet.
+export function nextClaim(me, claims, prefer = null) {
   const own = owners(claims);
   const mine = claims.find((c) => c.id === me);
   if (mine?.role && own[mine.role]?.id === me) return mine.role; // keep it
+  if (prefer && ROLES.includes(prefer) && (!own[prefer] || own[prefer].id === me)) return prefer;
   return ROLE_PRIORITY.find((r) => !own[r] || own[r].id === me) ?? null;
 }
 

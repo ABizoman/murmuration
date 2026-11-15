@@ -18,7 +18,7 @@ import { Flock, textPoints } from '../live/flock.js';
 const $ = (id) => document.getElementById(id);
 const mm = () => window.murmuration;
 const setText = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
-const LABELS = { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody' };
+const LABELS = { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody', pad: 'Pad', arp: 'Arpeggio', perc: 'Percussion' };
 const css = getComputedStyle(document.documentElement);
 const COLORS = ROLES.map((r) => css.getPropertyValue(`--${r}`).trim());
 const RI = Object.fromEntries(ROLES.map((r, i) => [r, i]));
@@ -32,6 +32,10 @@ const ICONS = {
   bass: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M3 16c3-8 5-8 7 0s4 8 6 0 4-8 6 0 4 8 7 0"/></svg>',
   chords: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="7" width="24" height="18" rx="2"/><path d="M10 7v18M16 7v18M22 7v18"/><path d="M8 7h4v10H8zM14 7h4v10h-4zM20 7h4v10h-4z" fill="#4A4A52"/></svg>',
   melody: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M12 23V7l13-3v16"/><circle cx="9" cy="23" r="3.2"/><circle cx="22" cy="20" r="3.2"/></svg>',
+  // the extra layers: a soft swell (pad), rising steps (arp), a shaker (perc)
+  pad: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><path d="M3 20c4-10 8-10 13-4s9 6 13-4"/><path d="M3 25c4-6 8-6 13-2s9 4 13-2" opacity="0.5"/></svg>',
+  arp: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="24" r="2.4"/><circle cx="13" cy="18" r="2.4"/><circle cx="20" cy="12" r="2.4"/><circle cx="27" cy="6" r="2.4"/><path d="M8.4 22.4l2.2-2M15.4 16.4l2.2-2M22.4 10.4l2.2-2"/></svg>',
+  perc: '<svg viewBox="0 0 32 32" fill="none" stroke="#4A4A52" stroke-width="1.8" stroke-linecap="round"><rect x="10" y="4" width="12" height="18" rx="6"/><path d="M16 22v7"/><path d="M5 9l-2-2M27 9l2-2M5 15H2M27 15h3" opacity="0.6"/></svg>',
   none: '<svg viewBox="0 0 32 32" fill="none" stroke="#B9B9C0" stroke-width="1.8" stroke-dasharray="3 3"><circle cx="16" cy="16" r="10"/></svg>',
 };
 
@@ -162,9 +166,17 @@ function onNote(role, n, mine, now) {
       rings.push({ x: cx, y: cy, age: 0, life: 0.8, max: Math.min(W, H) * 0.45 });
       sunKick = 1;
     } else if (n.drum === 'snare') { flock.scatter(0.22 * amp, 110 * S); flock.light(ri, 0.05 * amp, 260, now); }
+    else if (n.drum === 'crash') { flock.scatter(0.4 * amp, 160 * S); flock.light(ri, 0.1 * amp, 900, now); sunKick = 1; } // a section starts
     else flock.light(ri, 0.02 * amp, 160, now);
   } else if (role === 'bass') { bassDrop = Math.min(1, bassDrop + 0.5 * amp); flock.light(ri, 0.04 * amp, 380, now); }
   else if (role === 'chords') { flock.light(ri, 0.12 * amp, 700, now); chordGlow = 1; }
+  else if (role === 'pad') { flock.light(ri, 0.06 * amp, 1400, now); chordGlow = Math.max(chordGlow, 0.5); } // a slow glow
+  else if (role === 'perc') flock.light(ri, 0.015 * amp, 120, now); // a shimmer
+  else if (role === 'arp') {
+    const pitch = n.midi ?? 64;
+    const y = H * (0.75 - Math.min(1, Math.max(0, (pitch - 50) / 36)) * 0.6);
+    spark(cx + (Math.random() - 0.5) * 40 * S, cy + (Math.random() - 0.5) * 40 * S, (30 + Math.random() * 60) * S, (y - cy) * 0.3, COLORS[ri], 1, 0.8);
+  }
   else if (role === 'melody') {
     const pitch = n.midi ?? (n.midis ? n.midis[0] : 72);
     const y = H * (0.75 - Math.min(1, Math.max(0, (pitch - 55) / 36)) * 0.6);
@@ -267,20 +279,27 @@ function skyWrite(text, holdMs, burst = 240) {
 
 // --- Applying a change to this device's agents ---------------------------------------------------
 let lastInstruction = null;
-function apply(text, { write = false, hud = true } = {}) {
+// main.js does the work (rules, then the AI if asked and needed; applies the changes here and sends
+// them to the device playing each part); this draws the result.
+async function apply(text, { write = false, hud = true, ai = false } = {}) {
   const m = mm();
   if (!m) return null;
   const { swarm, engine } = m;
   const mine = [...engine.myRoles];
-  const result = parseInstruction(text, engine.agents, mine);
+  const result = m.instruct ? await m.instruct(text, { ai }) : parseInstruction(text, engine.agents, mine);
   if (result.stop) {
     if (swarm.playing && !$('start').disabled) $('start').click();
     lastInstruction = { text, summary: swarm.playing ? 'left the song' : 'nothing to leave yet' };
     return result;
   }
-  for (const { role, set } of result.changes) Object.assign(engine.agents[role], set);
+  if (!result.understood) {
+    lastInstruction = { text, summary: result.summary };
+    renderStatus();
+    return result;
+  }
   const others = mine.length ? result.changes.map((c) => c.role).filter((r) => !mine.includes(r)) : [];
-  lastInstruction = { text, summary: result.summary, note: others.length ? `${others.map((r) => LABELS[r]).join(' and ')} ${others.length > 1 ? 'are' : 'is'} on another device` : '' };
+  const via = result.source ? ` (understood by ${result.source})` : '';
+  lastInstruction = { text, summary: result.summary + via, note: others.length ? `sent to the device playing ${others.map((r) => LABELS[r].toLowerCase()).join(' and ')}` : result.note || '' };
   if (result.understood && write) skyWrite(text.toLowerCase(), 2600);
   if (result.understood && hud) showHud(text, result);
   renderStatus();
@@ -360,13 +379,17 @@ function press(zone) {
   navigator.vibrate?.(10);
   const act = zone.dataset.act;
   if (act === 'menu') return openSheet(true);
-  if (act === 'higher') return apply('go higher');
-  if (act === 'lower') return apply('go lower');
+  // right / left: next / previous song, for the whole band (main.js)
+  if (act === 'next') { toast('Next song \u2192 the whole band switches', 'good'); return mm()?.nextSong(); }
+  if (act === 'prev') {
+    const went = mm()?.prevSong();
+    return toast(went ? '\u2190 Back to the previous song' : 'No previous song yet', went ? 'good' : 'warn');
+  }
   if (act === 'break') {
     const { engine } = mm();
     const mine = [...engine.myRoles];
     const resting = mine.length && mine.every((r) => !engine.agents[r].auto && engine.agents[r].level === 0);
-    return apply(resting ? 'bring back' : 'take a break');
+    return apply(resting ? 'bring back' : 'take a break'); // "mute" my part (from the next phrase)
   }
 }
 
@@ -433,17 +456,20 @@ function renderStatus() {
   const iconKey = role || 'none';
   if (icon.dataset.k !== iconKey) {
     icon.dataset.k = iconKey;
-    icon.innerHTML = ICONS[iconKey];
+    icon.innerHTML = ICONS[iconKey] ?? ICONS.none; // never 'undefined' for a part without an icon
     icon.classList.remove('pop');
     void icon.offsetWidth;
     icon.classList.add('pop');
   }
-  setText($('instRole'), role ? `${LABELS[role]}${mine.length > 1 ? ` · ${mine.indexOf(role) + 1}/${mine.length}` : ''}` : 'Your part');
+  setText($('instRole'), role ? `${LABELS[role] ?? role}${mine.length > 1 ? ` · ${mine.indexOf(role) + 1}/${mine.length}` : ''}` : 'Your part');
   setText($('instName'), role ? (d?.voice ? voiceById[d.voice]?.label ?? d.voice : 'Choosing…') : playing ? 'Listening' : 'Not playing yet');
   const lvl = role ? (d ? d.level : engine.agents[role].level) : 0;
   $('instLevel').querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', lvl > i));
   $('instLevel').title = role ? LEVEL_NAMES[lvl] : '';
 
+  // the bottom button mutes my part(s): show a crossed speaker while they rest
+  const muted = mine.length && mine.every((r) => !engine.agents[r].auto && engine.agents[r].level === 0);
+  $('muteIcon')?.classList.toggle('muted', !!muted);
   renderRoom(v, playing);
   watchSwarm(v, engine);
 }
@@ -478,8 +504,9 @@ function toast(text, kind = '') {
   el.className = kind;
   el.textContent = text;
   $('toasts').append(el);
-  setTimeout(() => el.classList.add('out'), 3600);
-  setTimeout(() => el.remove(), 4200);
+  const ms = text.length > 60 ? 6500 : 3600; // long ones (what an instruction changed) stay longer
+  setTimeout(() => el.classList.add('out'), ms);
+  setTimeout(() => el.remove(), ms + 600);
   while ($('toasts').children.length > 2) $('toasts').firstElementChild.remove();
 }
 function watchSwarm(v, engine) {
@@ -509,9 +536,27 @@ $('composer').addEventListener('submit', (e) => {
   if (!text) return;
   $('prompt').value = '';
   $('prompt').blur();
-  const result = apply(text, { write: true, hud: false });
-  if (result && !result.understood) showHud('Hmm', result);
-  if (result?.understood && !mm().swarm.playing && !$('start').disabled) $('start').click();
+  // starting the song must happen inside this click, so not after waiting for the AI
+  const quick = parseInstruction(text, mm().engine.agents, [...mm().engine.myRoles]);
+  if (quick.understood && !quick.stop && !mm().swarm.playing && !$('start').disabled) $('start').click();
+  if (!quick.understood && !quick.stop) showHud('Thinking\u2026', { understood: true, summary: 'asking the AI what you mean', changes: [] });
+  apply(text, { write: true, hud: false, ai: true }).then((result) => {
+    if (!result) return;
+    // Say what changed, where, and when it will be heard: parts are written ahead, so a change
+    // lands at the next phrase, seconds later.
+    if (!result.understood) return toast(result.summary, 'warn');
+    const when = result.whenSec != null ? ` \u00B7 you\u2019ll hear it in ~${result.whenSec}s` : '';
+    const where = lastInstruction?.note ? ` \u00B7 ${lastInstruction.note}` : '';
+    toast(`\u2713 ${result.summary}${where}${when}`, 'good');
+    showHud(text, result);
+  });
+});
+
+// Another device asked for a change: say what, and light up the parts it touched.
+window.addEventListener('murmuration:instruct', (e) => {
+  const { by, text, summary, mine } = e.detail;
+  toast(`${by}: \u201C${text}\u201D${mine.length ? ` \u2192 ${summary}` : ''}`, mine.length ? 'good' : '');
+  for (const r of e.detail.roles) flock?.light(RI[r], 0.5, 1200, performance.now());
 });
 
 // --- Menu sheet and invite ---------------------------------------------------------------------------

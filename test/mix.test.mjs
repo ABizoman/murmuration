@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MIX, DRUM_STRIP, mixFor, isWeakDevice, dbToGain, reverbsIn } from '../src/mix.js';
 import { DRUM_FILES } from '../src/voices.js';
-import { createLibrary, ROLES } from '../src/loops.js';
+import { createLibrary, ROLES , kindOf } from '../src/loops.js';
 
 const full = mixFor(false);
 const lite = mixFor(true);
@@ -17,7 +17,7 @@ test('mix: every strip reaches a bus, every bus reaches the master, nothing is o
     for (const send of ['room', 'hall', 'delay']) assert.ok(s[send] == null || (s[send] > 0 && s[send] <= 1), `${name} ${send} ${s[send]}`);
   }
   // one strip per pitched role, plus the three the drums split into
-  for (const role of ROLES.filter((r) => r !== 'drums')) assert.ok(MIX.strips[role], `no strip for ${role}`);
+  for (const role of ROLES.filter((r) => kindOf(r) !== 'drums')) assert.ok(MIX.strips[role], `no strip for ${role}`); // perc goes to the hats
   assert.deepEqual(Object.keys(MIX.strips).filter((n) => MIX.strips[n].bus === 'drums'), ['kick', 'body', 'hats']);
   for (const bus of Object.keys(MIX.buses)) assert.ok(Object.values(MIX.strips).some((s) => s.bus === bus), `${bus} has no strips`);
 });
@@ -39,16 +39,16 @@ test('mix: the EQ does what the plan says (and the kick is left alone)', () => {
   assert.ok(MIX.strips.chords.eq.mid <= -2 && MIX.strips.chords.eq.mid >= -3);
   assert.ok(centre(MIX.strips.chords.eq) > 300 && centre(MIX.strips.chords.eq) < 400, `chords cut at ${centre(MIX.strips.chords.eq)} Hz`);
   assert.equal(MIX.strips.melody.hp, 220);
-  assert.ok(MIX.strips.melody.eq.high === 1.5 && MIX.strips.melody.eq.highFrequency <= 3000);
-  assert.deepEqual(MIX.master.eq, { low: 1, high: 1.5, lowFrequency: 100, highFrequency: 10000 });
+  assert.ok(MIX.strips.melody.eq.high < 0 && MIX.strips.melody.eq.highFrequency <= 3000, 'a gentle top cut on the lead');
+  assert.deepEqual(MIX.master.eq, { low: 1, high: 0, lowFrequency: 100, highFrequency: 10000 });
   assert.equal(MIX.master.limiter, -1);
 });
 
 test('mix: drums sit in the room more than the kick, hats are off centre, the rest is centred', () => {
   assert.ok(MIX.strips.body.room > MIX.strips.kick.room, 'the snare gets more room than the kick');
   assert.ok(MIX.strips.hats.pan > 0.1 && MIX.strips.hats.pan < 0.3);
-  for (const n of ['kick', 'body', 'bass', 'melody']) assert.equal(MIX.strips[n].pan, 0, `${n} is centred`);
-  assert.equal(MIX.strips.chords.widen, 0.4);
+  for (const n of ['kick', 'body', 'bass', 'chords', 'melody']) assert.equal(MIX.strips[n].pan, 0, `${n} is centred`);
+  assert.equal(MIX.strips.chords.widen, undefined, 'mono samples: the widener added no width');
   assert.ok(MIX.strips.melody.delay > 0 && MIX.strips.bass.delay == null, 'only the melody is delayed');
   assert.ok(MIX.strips.chords.hall > 0 && MIX.strips.melody.hall > 0 && MIX.strips.bass.hall == null);
 });
@@ -90,7 +90,6 @@ test('lite graph: one reverb, no widener, and the full graph never exceeds two r
   assert.equal(lite.lite, true);
   assert.equal(full.lite, false);
   // mixFor is pure: the shared spec is never edited
-  assert.equal(MIX.strips.chords.widen, 0.4);
   assert.equal(MIX.strips.chords.hall, 0.22);
   assert.ok(MIX.fx.hall && MIX.fx.hall.decay === 2.2);
   assert.equal(MIX.fx.room.decay, 0.9);

@@ -3,6 +3,7 @@
 // You tell it what the pack file is: role, style, density, and the key/mode and chords (one per bar)
 // it was written over. Packs rarely store that reliably, so it comes from the folder/file name or you.
 
+import { kindOf } from './loops.js';
 import { parseChord, degreeInterval, anchorFor } from './theory.js';
 
 const GM_DRUMS = { 35: 'kick', 36: 'kick', 37: 'snare', 38: 'snare', 39: 'snare', 40: 'snare', 42: 'hat', 44: 'hat', 46: 'ohat', 49: 'ohat', 51: 'hat', 48: 'tom1', 50: 'tom1', 45: 'tom2', 47: 'tom2', 41: 'tom3', 43: 'tom3' };
@@ -26,14 +27,15 @@ export function toRelativeLoop(rawNotes, ppq, meta) {
   const chordFor = (bar) => parseChord(meta.progression[bar % meta.progression.length], meta.key, meta.mode);
   const base = { id: meta.id, role: meta.role, style: meta.style, density: meta.density, bars };
 
-  if (meta.role === 'drums') {
+  const kind = kindOf(meta.role);
+  if (kind === 'drums') {
     const events = inLoop
       .filter((n) => GM_DRUMS[n.midi])
       .map((n) => ({ bar: Math.floor(n.abs / 16), step: n.abs % 16, dur: 1, drum: GM_DRUMS[n.midi], vel: n.vel }));
     return { ...base, events };
   }
 
-  if (meta.role === 'chords') {
+  if (kind === 'chords') {
     // Keep the rhythm only; the voicing is rebuilt from the current chord.
     const byStep = new Map();
     for (const n of inLoop) {

@@ -4,7 +4,7 @@ import { SONGS, registerSong, songSeed } from '../src/songs/index.js';
 import { parseLine, compileSong } from '../src/songs/format.js';
 import { renderPhrase } from '../src/render.js';
 import { structureFromSeed } from '../src/seed.js';
-import { createLibrary, ROLES } from '../src/loops.js';
+import { createLibrary, ROLES , CORE_ROLES } from '../src/loops.js';
 import { Agent } from '../src/agent.js';
 import { Engine } from '../src/engine.js';
 import { stepMs } from '../src/clock.js';
@@ -94,9 +94,10 @@ test('the swarm builds each song up layer by layer, in roughly the song order, a
     const order = DEFS[id].build;
     let firstWins = 0, allIn = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const parts = simulate(id, 16, seed);
-      const entry = Object.fromEntries(ROLES.map((r) => [r, parts.find((x) => x.role === r && x.part.notes.length)?.phrase ?? 99]));
-      if (entry[order[0]] === 0 && ROLES.filter((r) => r !== order[0]).every((r) => entry[r] > 0)) firstWins++;
+      // these songs predate the extra layers, which rest in them: judge the core band
+      const parts = simulate(id, 16, seed).filter((x) => CORE_ROLES.includes(x.role));
+      const entry = Object.fromEntries(CORE_ROLES.map((r) => [r, parts.find((x) => x.role === r && x.part.notes.length)?.phrase ?? 99]));
+      if (entry[order[0]] === 0 && CORE_ROLES.filter((r) => r !== order[0]).every((r) => entry[r] > 0)) firstWins++;
       if (Math.max(...Object.values(entry)) <= 8) allIn++;
       for (const x of parts) {
         assert.equal(x.part.d.interaction, 'none', `${id}: ${x.role} reacted to someone`);
@@ -104,7 +105,7 @@ test('the swarm builds each song up layer by layer, in roughly the song order, a
         assert.ok(DEFS[id].voices[x.role].includes(x.part.d.voice), `${id}: ${x.role} on ${x.part.d.voice}`);
       }
       // once in, a part stays in
-      for (const r of ROLES) {
+      for (const r of CORE_ROLES) {
         const lv = parts.filter((x) => x.role === r).map((x) => x.part.d.level);
         const first = lv.findIndex((l) => l > 0);
         if (first >= 0) assert.ok(lv.slice(first).filter((l) => l === 0).length <= 1, `${id}: ${r} dropped out ${lv.join('')}`);

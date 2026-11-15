@@ -15,6 +15,7 @@
 import { seededRandom } from './seed.js';
 import { voiceById } from './voices.js';
 import { stepMs, MAX_SWING } from './clock.js';
+import { kindOf } from './loops.js';
 
 export const MAX_NUDGE = 0.25; // steps, either way
 export const MAX_OFFSET = 0.5; // steps: a strum never spreads further than an 8th note
@@ -28,7 +29,7 @@ const sym = (r, a) => (r() * 2 - 1) * a; // symmetric draw in +-a
 // The odd 16ths are late by `swing` of a step. Every device computes this from shared data.
 export const swingOffset = (step, swing = 0) => (step % 2 === 1 ? clamp(swing || 0, 0, MAX_SWING) : 0);
 
-const HATS = new Set(['hat', 'hihat', 'ohat', 'ride']);
+const HATS = new Set(['hat', 'hihat', 'ohat', 'ride', 'shaker', 'tamb']);
 const TOMS = new Set(['tom1', 'tom2', 'tom3']);
 const SNARES = new Set(['snare', 'clap', 'rim']);
 const STRUM = new Set(['keys', 'guitar']); // pianos and guitars strum; pads, strings and brass don't
@@ -52,6 +53,9 @@ function drumContext(notes, order) {
 }
 
 function drumFeel(n, r, ctx, i) {
+  // The crash and the riser are effects placed by the arrangement: exactly on time, fixed level.
+  if (n.drum === 'crash') return { nudge: 0, vel: 0.8 };
+  if (n.drum === 'riser') return { nudge: 0, vel: n.vel };
   const inBar = n.step % 16;
   const bar = Math.floor(n.step / 16);
   const hat = HATS.has(n.drum);
@@ -82,8 +86,9 @@ function strumOffsets(midis, r, sMs) {
   return offsets;
 }
 
-export function humanise(notes, { role, phrase = 0, seed = '', voice = null, bpm = 100 } = {}) {
+export function humanise(notes, { role: part, phrase = 0, seed = '', voice = null, bpm = 100 } = {}) {
   if (!Array.isArray(notes) || !notes.length) return [];
+  const role = kindOf(part); // pad feels like chords, arp like a melody, perc like drums
   const sMs = stepMs(bpm);
   const order = notes.map((_, i) => i).sort((a, b) => notes[a].step - notes[b].step || a - b);
   const drums = role === 'drums' ? drumContext(notes, order) : null;
@@ -93,7 +98,7 @@ export function humanise(notes, { role, phrase = 0, seed = '', voice = null, bpm
   const strum = role === 'chords' && STRUM.has(voiceById[voice]?.family);
 
   return notes.map((n, i) => {
-    const r = seededRandom(seed, phrase, role, i);
+    const r = seededRandom(seed, phrase, part, i);
     const inBar = n.step % 16;
     const out = { ...n };
     let nudge = 0;
@@ -135,6 +140,7 @@ export function sanitiseNotes(list, { maxNotes = 400 } = {}) {
     if (!n || !Number.isInteger(n.step) || n.step < 0 || n.step >= 64 || !(n.dur > 0)) continue;
     const note = { step: n.step, dur: num(n.dur, 0.25, 64, 1), vel: num(n.vel, 0, 1, 0.7) };
     if (Number.isFinite(n.nudge)) note.nudge = clamp(n.nudge, -MAX_NUDGE, MAX_NUDGE);
+    if (Number.isFinite(n.sweep)) note.sweep = clamp(Math.round(n.sweep), 1, 64); // transitions.js build-up
     if (typeof n.drum === 'string') note.drum = n.drum.slice(0, 12);
     else if (Number.isFinite(n.midi)) note.midi = clamp(Math.round(n.midi), 0, 127);
     else if (Array.isArray(n.midis) && n.midis.length && n.midis.length <= 8 && n.midis.every(Number.isFinite)) {

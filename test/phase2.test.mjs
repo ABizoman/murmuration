@@ -1,3 +1,4 @@
+import { ROLES } from '../src/loops.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { owners, nextClaim, assignment, rolesFor, rendezvous } from '../src/swarm/roles.js';
@@ -18,9 +19,10 @@ test('claims: earliest wins, ties broken by smaller id', () => {
 
 test('newcomers take free roles in priority order and never steal', () => {
   let claims = [];
-  const ids = ['m1', 'm2', 'm3', 'm4', 'm5'];
+  const ids = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'];
   ids.forEach((id, i) => claims.push({ id, role: nextClaim(id, claims), ts: i }));
-  assert.deepEqual(claims.map((c) => c.role), ['chords', 'drums', 'bass', 'melody', null]);
+  // the core band first, then the extra layers; an eighth device doubles
+  assert.deepEqual(claims.map((c) => c.role), ['chords', 'drums', 'bass', 'melody', 'pad', 'arp', 'perc', null]);
   // m1 keeps chords even when re-evaluated
   assert.equal(nextClaim('m1', claims), 'chords');
 });
@@ -35,9 +37,9 @@ test('every role is sounded by someone; orphan roles are covered the same way by
   const claims = [{ id: 'p', role: 'chords', ts: 1 }, { id: 'q', role: 'drums', ts: 2 }];
   const live = ['p', 'q'];
   const a = assignment(claims, live);
-  for (const r of ['chords', 'drums', 'bass', 'melody']) assert.ok(a.players[r].length >= 1, r);
+  for (const r of ROLES) assert.ok(a.players[r].length >= 1, r);
   const union = new Set([...rolesFor('p', claims, live), ...rolesFor('q', claims, live)]);
-  assert.equal(union.size, 4);
+  assert.equal(union.size, ROLES.length);
   assert.equal(rendezvous('bass', ['p', 'q']), rendezvous('bass', ['q', 'p']), 'order-independent');
 });
 
@@ -49,7 +51,7 @@ test('when an owner leaves, its role gets covered', () => {
 });
 
 test('a lone device sounds every role', () => {
-  assert.equal(rolesFor('solo', [{ id: 'solo', role: 'chords', ts: 0 }], ['solo']).size, 4);
+  assert.equal(rolesFor('solo', [{ id: 'solo', role: 'chords', ts: 0 }], ['solo']).size, ROLES.length);
 });
 
 test('gossip reaches everyone on a line topology, exactly once each', () => {

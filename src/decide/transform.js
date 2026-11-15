@@ -8,13 +8,14 @@
 //
 // The target is a part summary from the shared score (usually the previous phrase).
 
+import { kindOf } from '../loops.js';
 import { chordAt } from '../render.js';
 import { anchorFor, degreeToMidi, diatonicIndex, rootNear } from '../theory.js';
 
 const strength = (step) => { const s = step % 16; return s === 0 ? 5 : s % 8 === 0 ? 4 : s % 4 === 0 ? 3 : s % 2 === 0 ? 2 : 1; };
 const PITCHED_MAX = { 1: 3, 2: 6, 3: 10 }; // notes per bar by level
 const SPARSE_MAX = { 1: 2, 2: 4, 3: 6 }; // kicks / chord stabs / bass notes per bar by level
-const isMelodic = (role) => role === 'bass' || role === 'melody';
+const isMelodic = (role) => kindOf(role) === 'bass' || kindOf(role) === 'melody';
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const barOf = (n) => Math.floor(n.step / 16);
 const byStep = (a, b) => a.step - b.step;
@@ -26,7 +27,7 @@ function thin(items, max, stepOf = (x) => x) {
 
 function onsetSteps(target) {
   let notes = target.notes;
-  if (target.role === 'drums') {
+  if (kindOf(target.role) === 'drums') {
     const kicks = notes.filter((n) => n.drum === 'kick'); // "lock to the kick"
     if (kicks.length) notes = kicks;
   }
@@ -48,7 +49,8 @@ function tidy(notes) {
 
 // env: { role, level, register, structure, phrase }
 function echoRhythm(base, target, env) {
-  const { role, level } = env;
+  const { level } = env;
+  const role = kindOf(env.role); // pad behaves like chords, arp like a melody, perc like drums
   const steps = onsetSteps(target);
   const out = [];
   let lastSeq = [], lastVoicing = null;
@@ -91,18 +93,18 @@ function targetIndices(target, structure) {
 
 function place(idx, step, env) {
   const chord = chordAt(env.structure, env.phrase, Math.floor(step / 16));
-  const i = env.role === 'bass' ? ((idx % 7) + 7) % 7 : clamp(idx, -3, 10);
+  const i = kindOf(env.role) === 'bass' ? ((idx % 7) + 7) % 7 : clamp(idx, -3, 10);
   return degreeToMidi(i, 0, chord, anchorFor(env.role, chord, env.register));
 }
 
 function echoContour(base, target, env) {
   const src = targetIndices(target, env.structure);
-  const max = env.role === 'bass' ? SPARSE_MAX[env.level] + 2 : PITCHED_MAX[env.level];
+  const max = kindOf(env.role) === 'bass' ? SPARSE_MAX[env.level] + 2 : PITCHED_MAX[env.level];
   const out = [];
   for (let bar = 0; bar < 4; bar++) {
     const theirs = thin(src.filter((n) => barOf(n) === bar), max, (n) => n.step);
     if (!theirs.length) { out.push(...base.filter((n) => barOf(n) === bar)); continue; }
-    for (const n of theirs) out.push({ step: n.step, dur: env.role === 'bass' ? Math.min(n.dur, 6) : n.dur, vel: n.vel, midi: place(n.idx, n.step, env) });
+    for (const n of theirs) out.push({ step: n.step, dur: kindOf(env.role) === 'bass' ? Math.min(n.dur, 6) : n.dur, vel: n.vel, midi: place(n.idx, n.step, env) });
   }
   return out;
 }
@@ -127,7 +129,8 @@ function gapSlots(target) {
 
 export function answer(base, target, env) {
   if (!target?.notes?.length) return base;
-  const { role, level } = env;
+  const { level } = env;
+  const role = kindOf(env.role); // pad behaves like chords, arp like a melody, perc like drums
   const gaps = gapSlots(target);
   const inGap = (n) => gaps[Math.floor(n.step / 8)];
   let out;
@@ -163,7 +166,7 @@ export function answer(base, target, env) {
         const pivot = motif[0].idx;
         for (const n of motif) {
           const step = n.step + 8;
-          out.push({ step, dur: Math.min(n.dur, (slot + 1) * 8 - step), vel: n.vel, midi: place(2 * pivot - n.idx + (target.role === 'bass' ? 4 : 0), step, env) });
+          out.push({ step, dur: Math.min(n.dur, (slot + 1) * 8 - step), vel: n.vel, midi: place(2 * pivot - n.idx + (kindOf(target.role) === 'bass' ? 4 : 0), step, env) });
         }
       }
     }

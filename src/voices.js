@@ -6,6 +6,7 @@
 // family: parts in the same family clash, so the rules avoid two at once
 // lead: a sound that stands out when a part is featured
 // gain: dB to even out the sample libraries (measured: mean level at the role's typical notes → -30 dB)
+// synth: the name of a synth patch in audio.js (PATCHES) instead of samples
 
 const OCT = (from, to) => {
   const out = [];
@@ -21,7 +22,9 @@ export const VOICES = {
     { id: 'kit-cr78', label: 'CR-78', kit: 'CR78', energy: 0.3, family: 'kit' },
     { id: 'kit-techno', label: 'Techno kit', kit: 'Techno', energy: 0.9, family: 'kit' },
     { id: 'kit-8', label: 'Kit 8', kit: 'Kit8', energy: 0.5, family: 'kit' },
-    { id: 'synth-drums', label: 'Synth drums', synth: true, energy: 0.5, family: 'kit', weight: 0.3 },
+    { id: 'synth-drums', label: 'Synth drums', synth: 'drums', energy: 0.5, family: 'kit', weight: 0.3 },
+    // a synthesised dance kit: deep kick, handclap, crisp hats (audio.js PATCHES.house)
+    { id: 'kit-house', label: 'House kit', synth: 'house', energy: 0.75, family: 'kit', weight: 0.4, gain: -4.5 },
   ],
   bass: [
     { id: 'bass-electric', label: 'Electric bass', dir: 'electric_bass_finger', files: OCT(1, 4), energy: 0.5, family: 'bass', release: 0.3, weight: 1.6, gain: -6 },
@@ -29,7 +32,7 @@ export const VOICES = {
     { id: 'bass-fretless', label: 'Fretless bass', dir: 'fretless_bass', files: OCT(1, 4), energy: 0.35, family: 'bass', release: 0.4, gain: 1 },
     { id: 'bass-slap', label: 'Slap bass', dir: 'slap_bass_1', files: OCT(1, 4), energy: 0.8, family: 'bass', release: 0.2, gain: 14, weight: 0.5 },
     { id: 'bass-tuba', label: 'Tuba', dir: 'tuba', files: OCT(1, 4), energy: 0.4, family: 'brass', release: 0.3, weight: 0.6, gain: -2 },
-    { id: 'synth-bass', label: 'Synth bass', synth: true, energy: 0.7, family: 'synth', weight: 0.3 },
+    { id: 'synth-bass', label: 'Synth bass', synth: 'bass', energy: 0.65, family: 'synth', weight: 1, gain: -6 },
   ],
   chords: [
     { id: 'keys-piano', label: 'Grand piano', dir: 'salamander', files: OCT(2, 6), energy: 0.4, family: 'keys', release: 1.2, weight: 1.6, gain: -5 },
@@ -40,7 +43,11 @@ export const VOICES = {
     { id: 'choir', label: 'Choir (aahs)', dir: 'choir_aahs', files: OCT(2, 6), energy: 0.35, family: 'voice', release: 0.6, gain: 5 },
     { id: 'strings', label: 'String ensemble', dir: 'string_ensemble_1', files: OCT(2, 6), energy: 0.4, family: 'strings', release: 0.6, gain: -1 },
     { id: 'brass-section', label: 'Brass section', dir: 'brass_section', files: OCT(2, 6), energy: 0.85, family: 'brass', release: 0.25, gain: 6 },
-    { id: 'synth-pad', label: 'Synth', synth: true, energy: 0.5, family: 'synth', weight: 0.3 },
+    { id: 'synth-pad', label: 'Synth pad', synth: 'pad', energy: 0.45, family: 'synth', weight: 1, gain: 11.5 },
+    // a soft FM electric piano: family 'keys', so feel.js strums it like the piano
+    { id: 'synth-keys', label: 'Synth keys', synth: 'keys', energy: 0.45, family: 'keys', weight: 1, gain: 13.5 },
+    // a house chord stab: detuned saws with a snapping filter
+    { id: 'synth-stab', label: 'Synth stab', synth: 'stab', energy: 0.7, family: 'synth', weight: 0.6, gain: 16.5 },
   ],
   melody: [
     { id: 'trumpet', label: 'Trumpet', dir: 'trumpet', files: OCT(3, 6), energy: 0.75, family: 'brass', release: 0.2, lead: true, weight: 1.3, gain: 4 },
@@ -52,10 +59,31 @@ export const VOICES = {
     { id: 'guitar-jazz', label: 'Jazz guitar', dir: 'electric_guitar_jazz', files: OCT(3, 6), energy: 0.35, family: 'guitar', release: 0.5, gain: 3 },
     { id: 'guitar-overdrive', label: 'Overdriven guitar', dir: 'overdriven_guitar', files: OCT(3, 6), energy: 0.9, family: 'guitar', release: 0.3, lead: true, weight: 0.7, gain: 3 },
     { id: 'voice-oohs', label: 'Choir (oohs)', dir: 'voice_oohs', files: OCT(3, 6), energy: 0.3, family: 'voice', release: 0.5, gain: 1 },
-    { id: 'synth-lead', label: 'Synth lead', synth: true, energy: 0.6, family: 'synth', weight: 0.3 },
+    { id: 'synth-lead', label: 'Synth lead', synth: 'lead', energy: 0.6, family: 'synth', lead: true, weight: 1, gain: 13.5 },
+    { id: 'synth-pluck', label: 'Synth pluck', synth: 'pluck', energy: 0.6, family: 'synth', lead: true, weight: 1, gain: 20.5 },
+    // a dance riff synth: a saw whose filter snaps shut after each note
+    { id: 'synth-riff', label: 'Riff synth', synth: 'riff', energy: 0.65, family: 'synth', lead: true, weight: 0.6, gain: 10.5 },
+    // the chords' electric piano samples, as a melody voice of its own (ids are never shared across roles)
+    { id: 'melody-epiano', label: 'Electric piano', dir: 'electric_piano_1', files: OCT(3, 6), energy: 0.4, family: 'keys', release: 0.8, gain: 1 },
   ],
 };
 
+// The extra layers (round 2, step 2). Ids are never shared across parts: a part's voices route to
+// its own channel strip.
+VOICES.pad = [
+  { id: 'pad-warm', label: 'Warm pad', synth: 'pad', energy: 0.4, family: 'synth', weight: 1.2, gain: 11 },
+  { id: 'pad-strings', label: 'Strings', dir: 'string_ensemble_1', files: OCT(2, 6), energy: 0.4, family: 'strings', release: 1.2, weight: 1, gain: -1 },
+  { id: 'pad-choir', label: 'Choir', dir: 'choir_aahs', files: OCT(2, 6), energy: 0.3, family: 'voice', release: 1, weight: 0.6, gain: 5 },
+];
+VOICES.arp = [
+  { id: 'arp-pluck', label: 'Arp pluck', synth: 'pluck', energy: 0.6, family: 'synth', weight: 1.2, gain: 24 },
+  { id: 'arp-riff', label: 'Arp synth', synth: 'riff', energy: 0.65, family: 'synth', weight: 1, gain: 8.5 },
+  { id: 'arp-epiano', label: 'Arp e-piano', dir: 'electric_piano_1', files: OCT(3, 6), energy: 0.4, family: 'keys', release: 0.6, weight: 0.8, gain: 1 },
+];
+VOICES.perc = [
+  { id: 'perc-shaker', label: 'Shaker & tambourine', synth: 'perc', energy: 0.6, family: 'perc', weight: 1, gain: 13 },
+];
+
 export const voiceById = Object.fromEntries(Object.values(VOICES).flat().map((v) => [v.id, v]));
-export const DEFAULT_VOICE = { drums: 'kit-acoustic', bass: 'bass-electric', chords: 'keys-piano', melody: 'sax-alto' };
+export const DEFAULT_VOICE = { drums: 'kit-acoustic', bass: 'bass-electric', chords: 'keys-piano', melody: 'sax-alto', pad: 'pad-warm', arp: 'arp-pluck', perc: 'perc-shaker' };
 export const DRUM_FILES = ['kick', 'snare', 'hihat', 'tom1', 'tom2', 'tom3'];
