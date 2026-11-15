@@ -8,9 +8,14 @@
 //
 // Only roles in `myRoles` are composed here. Other roles come from the devices that play them
 // (setRemotePart). A role in `doubling` is not composed: this device plays the owner's notes.
+//
+// A note sounds at `step + swingOffset(step) + nudge` sixteenths into the phrase: the swing comes
+// from the shared structure and the nudge was baked into the note by feel.js at compose time, so
+// every device that plays this part puts the note in exactly the same place.
 
 import { stepMs, phraseStartMs, position, STEPS_PER_PHRASE } from './clock.js';
 import { buildContext } from './decide/context.js';
+import { swingOffset } from './feel.js';
 import { DEFAULT_DIRECTIVE } from './decide/directive.js';
 
 const ORDER = ['drums', 'bass', 'chords', 'melody']; // later agents see what earlier ones just decided
@@ -20,7 +25,7 @@ export class Engine {
   constructor({ agents, audio, now, onEvent, onPlan, getAdvice, getDirective, composeAheadBars = 1, planAheadBars = 2, audioAheadMs = 150 }) {
     this.agents = Object.fromEntries(agents.map((a) => [a.role, a]));
     this.roles = ORDER.filter((r) => this.agents[r]);
-    this.audio = audio; // { play(role, note, whenMs, durMs, voiceId) }  whenMs on the same clock as now()
+    this.audio = audio; // { play(role, note, whenMs, durMs, voiceId, stepMs) }  whenMs on the same clock as now()
     this.now = now;
     this.onEvent = onEvent || (() => {});
     this.onPlan = onPlan || (() => {});
@@ -144,11 +149,11 @@ export class Engine {
         part.notes.forEach((n, i) => {
           const key = `${role}:${i}`;
           if (entry.sent.has(key)) return;
-          const when = t0 + n.step * sMs;
+          const when = t0 + (n.step + swingOffset(n.step, this.structure.swing) + (n.nudge || 0)) * sMs;
           if (when > now + this.audioAheadMs) return;
           entry.sent.add(key);
           if (when < now - 20) return; // too late (joined mid-phrase, or tab throttled): skip
-          this.audio.play(role, n, when, n.dur * sMs, part.d?.voice);
+          this.audio.play(role, n, when, n.dur * sMs, part.d?.voice, sMs);
         });
       }
     }

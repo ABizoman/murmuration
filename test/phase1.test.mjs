@@ -31,9 +31,13 @@ test('degrees map to chord tones and scale tones', () => {
 test('seed only gives structure, deterministically', () => {
   const a = structureFromSeed('durhack'), b = structureFromSeed('durhack');
   assert.deepEqual(a, b);
-  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'key', 'mode', 'mood', 'progression', 'seed']);
+  assert.deepEqual(Object.keys(a).sort(), ['bpm', 'key', 'mode', 'mood', 'progression', 'seed', 'swing']);
   const keys = new Set(Array.from({ length: 200 }, (_, i) => structureFromSeed(`s${i}`).key));
   assert.ok(keys.size >= 10, 'seeds spread over keys');
+  // Swing is shared timing: a number in the upbeat-pop range for every seed, never undefined.
+  const swings = Array.from({ length: 200 }, (_, i) => structureFromSeed(`s${i}`).swing);
+  for (const sw of swings) assert.ok(sw >= 0 && sw <= 0.06, `swing ${sw}`);
+  assert.ok(new Set(swings).size >= 10, 'seeds spread over swing amounts');
 });
 
 test('clock: phrase/bar/step from time', () => {

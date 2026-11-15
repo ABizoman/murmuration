@@ -12,6 +12,60 @@ Press **Start a song** on the first device; every other device shows **Join the 
 
 `npm test` runs the unit tests (Node only, no browser).
 
+## How to A/B a change
+
+Every change to the sound should be compared against what it replaced, on the same music:
+
+1. Open the page with a fixed random stream: `http://localhost:8000/?rng=test1` (works on `classic.html` too).
+   With `?rng=` set, every agent samples from a stream fixed by the rng text and its role, so the
+   same seed + the same rng make exactly the same music on that device — including which pack
+   variant it picks. Without it, everything is random as before.
+2. Press **Start**, then **Record 60 s** (Menu → This device; in the header on `classic.html`).
+   The clip downloads as `murmuration-<seed>-<HHMM>.webm` (`.mp4` on iPhone).
+3. Make the change, reload the same URL, and record again. Keep both clips and listen back to back.
+
+**Meters** (Menu → Under the hood → Meters, a panel on `classic.html`) show the master peak, an
+approximate loudness and how many times the master went above −0.3 dBFS. They reset at the start of
+every song, so after a mix change check that the loudness is about the same and clips stay at 0.
+
+Other switches for listening work:
+
+| URL | what it does |
+|---|---|
+| `?rng=test1` | fixes every agent's random stream: same seed + same rng = same music |
+| `?solo=bass` | hears one part on its own (`drums`, `bass`, `chords`, `melody`) — how `ROLE_GAIN` is measured |
+| `?lite=1` / `?lite=0` | forces the lite mix on or off instead of deciding from the device |
+
+**Re-measuring `ROLE_GAIN`** (in `src/audio.js`, after any change to `src/mix.js`): open
+`?rng=test1&solo=drums`, press Start, let it play a few phrases and read the loudness from the
+meters; repeat for each part; then move each `ROLE_GAIN` by the difference so all four land within
+about 1 dB of each other. Finally play everything together and check the peak stays under −1 dB and
+the clip counter stays at 0.
+
+## The mix
+
+`src/mix.js` holds the whole signal flow as data and `src/audio.js` builds the Tone.js graph from it:
+
+```
+per part:   sampler/synth → strip (highpass + EQ3 + pan or widener) → bus   (+ sends)
+drums bus   → Compressor (ratio 4) ─┐          kick, snare/toms and hats each have their own strip,
+bass bus    → duck → Compressor (3) ┤          so the hats can be filtered and panned and the snare
+chords bus  → duck ─────────────────┤          can sit further back in the room than the kick
+melody bus  ────────────────────────┴→ master: EQ3 → glue Compressor (2) → Limiter (−1) → speaker
+sends:      ROOM (0.9 s) · HALL (2.2 s) · DELAY (⅛ dotted ping-pong → highpass 300 Hz)
+```
+
+The highpass filters are what stop the parts fighting: nothing but the kick and bass is allowed
+below 180–220 Hz. Because the agents know exactly when every kick plays, the bass (−4 dB) and chord
+(−2 dB) buses are **ducked by hand** at kick time and come back over 120 ms — the pop "pump" with no
+sidechain and no analysis. Each drum kit therefore loads three samplers (kick / snare and toms /
+hats), one per route.
+
+Weak devices (four cores or fewer, or the frame watchdog in `src/main.js` noticing that the engine's
+ticks are slipping) switch to the **lite** graph: one reverb instead of two and no widener, which
+keeps a phone in time. `npm test` checks the routing, the ducking and the lite graph against a fake
+Tone.js (`test/fake-tone.mjs`), so the signal flow is covered even though the sound is not.
+
 ## Instruments
 Every part is played by a sampled instrument (`src/voices.js`, `src/audio.js`, samples in `samples/`, credits in `CREDITS.md`):
 
@@ -67,7 +121,8 @@ how busy, which pattern, which register, and whether to echo or answer another p
 | Shared score | `src/decide/context.js`, `src/engine.js` | Parts are gossiped with their notes, so every device holds the same score. Agents keep no private history: a device that takes a part over continues from what the last player did. |
 | 16. Offline rules | `src/decide/rules.js` | A weight for every option. Balance busyness around the band's target, leave room when the melody is busy, avoid a register someone is in, keep a pattern for a while then change, reply when addressed. Always available. |
 | 17. Jev | `src/decide/jev.js`, `ai.js` | Two bars before a phrase, the score goes to Jev with one yes/no question per option. If the probabilities are back before the agents decide (one bar before), they are blended in; otherwise the rules decide alone. |
-| Final choice | `src/decide/select.js` | Statistical: rule weight × Jev probability, then sample. The screen shows how sure each choice was and which sources were used. |
+| 19. Listening before playing | `src/decide/fit.js` | Each agent renders **six candidate parts** per phrase and scores every one against the band: are its notes on the chords, does it clash with another part by a semitone, does it crowd someone's register, does its rhythm lock with the kick or stay out of the melody's way, is it a singable line, is it close enough to its own last phrase, and (for drums) does the kick follow the bass. Every term is 0–1; the total is their weighted mean. |
+| Final choice | `src/decide/select.js` | Statistical: `log(rule weight × Jev probability) + 6 × fit`, softmaxed at temperature 0.35, then sampled — so the part played is both likely and fitting. A 9:1 prior needs a fit about 0.37 better to be overturned. The screen shows how sure each choice was, the fit and which of the six won. |
 | 18. Echo / answer | `src/decide/transform.js` | Echo copies a part's rhythm (kick locks to the bass, chords comp the melody) or, between bass and melody, its rhythm and contour in the new register. Answer plays in the gaps the other part leaves; a melody answers a melodic gesture with its mirror image half a bar later. |
 | Director | `src/decide/director.js`, `ai.js` | Every 4 phrases any device may ask an LLM for a direction (energy, featured part, who drops out, who echoes/answers whom). Proposals are gossiped; a device follows one once more than half of the live devices endorse it. It only shifts rule weights. |
 
@@ -114,4 +169,5 @@ the server was killed and gossip kept flowing; a closed tab's drums were picked 
 
 ## Phase 1: one device
 `src/seed.js` (seed → key, mode, tempo, progression), `src/clock.js` (phrase/bar/step from time), `src/loops.js` (loops in scale degrees),
-`src/render.js` + `src/theory.js` (loop → notes), `src/audio.js` (Tone.js), `src/engine.js` (compose ahead), `src/agent.js` (busyness, style), `src/midi-import.js` (MIDI packs → scale degrees).
+`src/render.js` + `src/theory.js` (loop → notes), `src/feel.js` (swing, humanising, the note-field contract),
+`src/audio.js` (Tone.js), `src/engine.js` (compose ahead), `src/agent.js` (busyness, style), `src/midi-import.js` (MIDI packs → scale degrees).

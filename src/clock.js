@@ -9,6 +9,9 @@ export const STEPS_PER_PHRASE = STEPS_PER_BAR * BARS_PER_PHRASE;
 export const localNow = () => performance.timeOrigin + performance.now();
 
 export const stepMs = (bpm) => 60000 / bpm / 4;
+// Swing is part of the grid: how far behind the odd 16ths sit, as a fraction of a 16th.
+// Shared through the structure (see seed.js) and applied at playback (see feel.js).
+export const MAX_SWING = 0.3;
 
 export function position(nowMs, startMs, bpm) {
   const s = (nowMs - startMs) / stepMs(bpm);

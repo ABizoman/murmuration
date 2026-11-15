@@ -1,8 +1,8 @@
 import { KEYS } from './theory.js';
-import { structureFromSeed } from './seed.js';
+import { structureFromSeed, randomFor } from './seed.js';
 import { localNow, STEPS_PER_PHRASE } from './clock.js';
 import { createLibrary, ROLES } from './loops.js';
-import { Agent } from './agent.js';
+import { Agent, CANDIDATES, CANDIDATES_LITE } from './agent.js';
 import { Engine } from './engine.js';
 import { createAudio } from './audio.js';
 import { importMidiFile } from './midi-import.js';
@@ -14,6 +14,9 @@ import { Director, sectionOf, SECTION_PHRASES } from './decide/director.js';
 import { describeDirective, DEFAULT_DIRECTIVE } from './decide/directive.js';
 import { summarise, describePart } from './decide/context.js';
 import { VOICES, voiceById } from './voices.js';
+import { clipName, describeMeters } from './listen.js';
+import { sanitiseNotes } from './feel.js';
+import { isWeakDevice } from './mix.js';
 
 const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
@@ -22,6 +25,16 @@ const LEVELS = ['silent', 'sparse', 'medium', 'busy'];
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
 const library = createLibrary({ packs: PACK_LOOPS });
+
+// ?rng=<text>: a reproducible run. Every agent (and through it every loop variant draw) samples
+// from a stream fixed by (rng, role), so the same seed + rng make the same music and two
+// recordings can be compared fairly. Without it everything samples from Math.random as before.
+const params = new URLSearchParams(location.search);
+const RNG = params.get('rng');
+// Dev switches for the mix (Phase 2): ?solo=<role> hears one part on its own, which is how
+// ROLE_GAIN in audio.js is measured; ?lite=1 forces the lite graph, ?lite=0 forbids it.
+const SOLO = ROLES.includes(params.get('solo')) ? params.get('solo') : null;
+const LITE = params.has('lite') ? params.get('lite') !== '0' : null;
 
 // Songs in songs-local/ (gitignored) are loaded before anything starts, so every device that
 // joins a "song:<id>" seed knows the song.
@@ -40,7 +53,10 @@ try {
 const songLibraries = {};
 const libraryFor = (structure) =>
   structure.song ? (songLibraries[structure.song.id] ||= createLibrary({ packs: SONGS[structure.song.id].loops, builtins: false })) : library;
-const agents = ROLES.map((r) => new Agent(r, library));
+// Each agent renders and scores this many candidate parts per phrase (Phase 3). A weak device
+// does less searching rather than missing the compose deadline.
+const CANDIDATE_COUNT = isWeakDevice(navigator) ? CANDIDATES_LITE : CANDIDATES;
+const agents = ROLES.map((r) => new Agent(r, library, randomFor(RNG, r), { candidates: CANDIDATE_COUNT }));
 let realAudio = null;
 let tickTimer = null;
 
@@ -79,6 +95,7 @@ const jev = new Jev({ library, onChange: renderDirection });
 // Director: any device may propose a direction for the next section; the swarm votes.
 const director = new Director({
   id: swarm.id,
+  random: randomFor(RNG, 'director'),
   now: () => swarm.clock.now(),
   publish: (body) => swarm.publish(body),
   liveCount: () => Math.max(1, swarm.liveIds().length),
@@ -126,7 +143,10 @@ const engine = new Engine({
   agents,
   now: () => swarm.clock.now(), // shared swarm time
   // The engine schedules in shared time; Web Audio needs this device's local time.
-  audio: { play: (role, n, when, dur, voice) => realAudio?.play(role, n, when - swarm.clock.offset, dur, voice) },
+  audio: {
+    play: (role, n, when, dur, voice, sMs) =>
+      (SOLO && role !== SOLO ? null : realAudio?.play(role, n, when - swarm.clock.offset, dur, voice, sMs)),
+  },
   onEvent,
   onPlan: (phrase, ctxs, deadlineMs) => {
     jev.plan(phrase, ctxs, deadlineMs);
@@ -141,7 +161,7 @@ engine.myRoles = new Set();
 
 function showStructure(seed) {
   const s = structureFromSeed(seed);
-  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.mood ? ` · ${s.mood}` : ''}`;
+  $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${s.progression.join(' – ')}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}`;
   return s;
 }
 $('seed').addEventListener('input', () => !swarm.song && showStructure($('seed').value));
@@ -165,12 +185,32 @@ function playSong(song) {
   const structure = showStructure(song.seed);
   showSeed(song.seed);
   const lib = libraryFor(structure);
-  for (const a of agents) a.library = lib;
+  for (const a of agents) {
+    a.library = lib;
+    if (RNG) a.random = randomFor(RNG, a.role); // start the stream again, so a second run repeats the first
+  }
+  realAudio?.resetMeters();
   jev.library = lib;
   engine.start(structure, song.startMs);
   syncDoubling();
   clearInterval(tickTimer);
-  tickTimer = setInterval(() => engine.tick(), 25);
+  lastTick = 0;
+  tickTimer = setInterval(tick, 25);
+}
+
+// A device that cannot keep up drops to the lite mix (one reverb, no widener) rather than losing
+// time. The engine's own tick is the thing that has to stay punctual, so that is what we measure.
+let lastTick = 0;
+let lateTicks = 0;
+function tick() {
+  const now = performance.now();
+  if (lastTick) lateTicks = Math.max(0, lateTicks + (now - lastTick > 75 ? 1 : -0.05));
+  lastTick = now;
+  if (lateTicks > 15 && realAudio?.setLite()) {
+    lateTicks = 0;
+    log('this device was dropping frames: <b>lite mix</b> (one reverb, no widener)');
+  }
+  engine.tick();
 }
 
 $('start').addEventListener('click', async () => {
@@ -181,7 +221,7 @@ $('start').addEventListener('click', async () => {
     log('left the song (still connected to the swarm)');
     return updateButton();
   }
-  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples }); // needs this click
+  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE }); // needs this click
   try { await navigator.wakeLock?.request('screen'); } catch {}
   if (swarm.song) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
@@ -219,6 +259,49 @@ function updateButton() {
   }
 }
 
+// --- Listening tools: record a clip, read the master meters -------------------------
+
+// The seed of what is playing (or about to), for the clip's file name.
+const currentSeed = () => swarm.song?.seed ?? ($('song').value ? songSeed($('song').value) : $('seed').value.trim() || 'durhack');
+
+const RECORD_SECONDS = 60;
+
+$('record')?.addEventListener('click', async () => {
+  const btn = $('record');
+  if (!realAudio) return log('press Start first: there is nothing to record yet');
+  if (!realAudio.canRecord()) return log('this browser cannot record audio');
+  if (realAudio.isRecording()) return;
+  const startedAt = new Date();
+  const label = btn.textContent;
+  let left = RECORD_SECONDS;
+  btn.disabled = true;
+  btn.textContent = `Recording… ${left}s`;
+  const countdown = setInterval(() => (btn.textContent = `Recording… ${Math.max(0, --left)}s`), 1000);
+  try {
+    const blob = await realAudio.recordClip(RECORD_SECONDS);
+    const name = clipName(currentSeed(), startedAt, blob.type);
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    log(`saved <b>${esc(name)}</b> (${Math.round(blob.size / 1024)} kB)`);
+  } catch (err) {
+    log(`recording failed: ${esc(err.message)}`);
+  } finally {
+    clearInterval(countdown);
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+// Dev meters: master peak, an approximate loudness and how often the master went above -0.3 dBFS.
+setInterval(() => {
+  const el = $('meters');
+  if (el && realAudio) el.textContent = describeMeters(realAudio.meters()) + (realAudio.isLite() ? ' · lite mix' : '') + (SOLO ? ` · solo ${SOLO}` : '');
+}, 250);
+
 // --- Parts going out and coming in ------------------------------------------------
 
 function onEvent(ev) {
@@ -230,11 +313,9 @@ function onEvent(ev) {
   renderAgents();
 }
 
-function validNotes(list) {
-  if (!Array.isArray(list)) return [];
-  return list.slice(0, 400).filter((n) => n && Number.isInteger(n.step) && n.step >= 0 && n.step < 64 && n.dur > 0 &&
-    (typeof n.drum === 'string' || Number.isFinite(n.midi) || (Array.isArray(n.midis) && n.midis.every(Number.isFinite))));
-}
+// Notes from another device: keep the fields we use (including the Phase 1 groove fields `nudge`
+// and `offsets`) and bound every one of them. See sanitiseNotes in feel.js.
+const validNotes = (list) => sanitiseNotes(list);
 
 function onRemotePart(body, origin) {
   if (!engine.structure || !ROLES.includes(body.role) || !Number.isInteger(body.phrase)) return;
@@ -253,7 +334,10 @@ function onRemotePart(body, origin) {
 function detail(part) {
   if (!part || !part.p) return part?.source ? `decided with ${part.source}` : '';
   const pct = (x) => `${Math.round(x * 100)}%`;
-  return `${part.source} · sure: busy ${pct(part.p.level)}, pattern ${pct(part.p.style)}, react ${pct(part.p.interaction)}`;
+  const fit = part.fit
+    ? ` · fit ${pct(part.fit.total)} (${part.rank} of ${part.candidates}: ${Object.entries(part.fit.terms).map(([k, v]) => `${k} ${pct(v)}`).join(', ')})`
+    : '';
+  return `${part.source} · sure: busy ${pct(part.p.level)}, pattern ${pct(part.p.style)}, react ${pct(part.p.interaction)}${fit}`;
 }
 
 function renderDirection() {
@@ -436,3 +520,4 @@ window.murmuration = { swarm, engine, jev, director };
 
 swarm.start();
 renderSwarm();
+if (RNG) log(`reproducible run: rng <b>${esc(RNG)}</b> (same seed + rng = same music)`);

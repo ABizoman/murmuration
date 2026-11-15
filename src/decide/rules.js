@@ -27,7 +27,8 @@ const AFFINITY = {
 };
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
-const runLength = (history, key) => {
+// How many phrases in a row the part has kept the same value for `key`.
+export const runLength = (history, key) => {
   let n = 0;
   for (const h of history) {
     if (h[key] !== history[0][key]) break;
