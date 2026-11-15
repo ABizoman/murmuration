@@ -29,8 +29,9 @@ export function songWins(a, b) {
 const sameSong = (a, b) => a && b && a.seed === b.seed && Math.abs(a.startMs - b.startMs) < 1;
 
 export class Swarm {
-  constructor({ localNow, signalUrl, getPosition, events, welcomeExtra = () => ({}) }) {
+  constructor({ localNow, signalUrl, getPosition, events, welcomeExtra = () => ({}), preferRole = null }) {
     this.welcomeExtra = welcomeExtra;
+    this.preferRole = preferRole; // ?part=<role>: the part this device claims if it is free
     this.id = makeId();
     this.ev = events; // { log, song, roles, part, change }
     this.getPosition = getPosition;
@@ -196,7 +197,7 @@ export class Swarm {
 
   join() {
     this.playing = true;
-    const role = nextClaim(this.id, this.claims());
+    const role = nextClaim(this.id, this.claims(), this.preferRole);
     this.claim = role ? { role, ts: this.clock.now() } : null;
     this.ev.log(role ? `claiming <b>${role}</b>` : 'all roles taken: doubling a part');
     this.recompute();
@@ -231,7 +232,7 @@ export class Swarm {
 
   recompute() {
     if (this.playing) {
-      const want = nextClaim(this.id, this.claims());
+      const want = nextClaim(this.id, this.claims(), this.preferRole);
       if ((want ?? null) !== (this.claim?.role ?? null)) {
         const lostTo = this.claim && assignment(this.claims(), this.liveIds()).owners[this.claim.role]?.id;
         this.claim = want ? { role: want, ts: this.clock.now() } : null;

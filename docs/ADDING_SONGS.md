@@ -122,3 +122,41 @@ node tools/midi-to-song.mjs my-song.mid --id my-song --title "My Song" --compose
 3. Other devices that join get the song automatically (they load it from the same server).
 
 If something is off, the error names the song, the part and the bar. A song file with an error is skipped and the page log says why.
+
+
+## Songs with sections (verse, chorus, ...)
+
+A song can be written as **sections**, each with its own chords and parts, and a **form** that says
+in which order they play. `src/songs/murmur-pop.js` is the full example.
+
+```js
+export default {
+  id: 'murmur-pop', title: 'Murmur', key: 'A', mode: 'major', bpm: 116,
+  voices: { drums: ['kit-breakbeat'], bass: ['bass-electric'], chords: ['keys-piano'], melody: ['synth-pluck'] },
+  register: { melody: 1 },            // optional: play a part an octave up (or -1 down)
+  sections: {
+    intro:  { progression: ['I', 'V', 'vi', 'IV'], parts: { drums: { kick: 'x.......x.......' } } },
+    verse:  { progression: ['vi', 'IV', 'I', 'V'], parts: { bass: `...`, chords: `x:4 .:2 x:4 .:2 x:4`, drums: { ... } } },
+    chorus: { progression: ['I', 'V', 'vi', 'IV'], hook: true, parts: { melody: `...`, bass: `...`, chords: `...`, drums: { ... } } },
+  },
+  form: [['intro', 1], ['verse', 2], ['chorus', 2], ['verse', 2], ['chorus', 2]],   // [section, phrases of 4 bars]
+  end: true,                          // after the form: one last chord, then the song stops
+};
+```
+
+- Each section has a `progression` (4 or 8 chords, one per bar, counted from the start of the
+  section) and `parts`. A part is written **once** (a string, or a drum object), not as
+  sparse/medium/busy: a section always plays as written. A part missing from a section rests in it.
+- A section can be used several times in the form. Names are letters and digits; `verse2`,
+  `finalChorus` and so on get the defaults of `verse`, `chorus`.
+- Defaults by name (each can be set in the section: `energy`, `plan`, `transitionIn`):
+  energy intro 0.35, verse 0.5, pre 0.65, chorus 0.9, finalChorus 1, bridge and breakdown 0.4,
+  outro 0.3. `hook: true` sections get a fill, a crash and a riser leading into them; a verse after
+  a chorus a fill and a crash; a pre-chorus a fill.
+- The form *is* the arrangement: who plays when comes from the sections, not from `build`. A song
+  with sections ignores the director and keeps the first instrument listed for each part all the
+  way through, so every device plays it the same way.
+- An 8-bar part starts at the beginning of its section, whatever phrase the section starts on.
+- Without `end: true` the form goes round again from its second section (or from `loopFrom: 'verse'`).
+- Errors name the song, the section, the part and the bar ("murmur-pop: chorus melody (sparse),
+  bar 3: adds up to 14 sixteenths instead of 16").

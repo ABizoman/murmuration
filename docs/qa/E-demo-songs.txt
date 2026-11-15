@@ -1,0 +1,36 @@
+Murmuration music QA · 20 phrases · rng "qa-<seed>" · seeds song:murmur-pop, song:ode-to-joy-pop
+four devices, one part each (60 ms gossip) · horizons staggered (drums + chords 2, bass 1.5, melody 1 bars)
+(loop/voice changes count only consecutive phrases where the part plays in both)
+
+== song:murmur-pop: A major · 116 bpm · I V vi IV · swing 0.02 (260 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.83  10/16         0/17           rhythm 0.83, drums 0.80, continuity 1.00
+bass      0.92  9/15          0/16           harmony 0.98, bassRoot 1.00, rhythm 0.80, shape 0.63, clash 0.99, register 1.00, continuity 0.83
+chords    0.80  9/14          0/15           clash 0.63, register 1.00, rhythm 0.92, continuity 0.83
+melody    0.92  6/11          0/11           harmony 0.85, clash 1.00, register 1.00, rhythm 0.83, shape 0.99, continuity 0.67
+form: intro intro2 verse pre chorus verse2 pre chorus bridge finalChorus outro end
+  hook in later chorus phrases 5/5 · chorus melody continuity 1.00 · fills 6/6 · crashes 5/5 · risers 3/3
+
+== song:ode-to-joy-pop: D major · 120 bpm · I V I V (141 ms)
+role       fit  loop changes  voice changes  terms
+drums     0.89  6/10          0/13           rhythm 0.91, continuity 1.00, drums 0.86
+bass      0.93  4/9           0/10           harmony 1.00, bassRoot 1.00, clash 1.00, register 1.00, rhythm 0.78, shape 0.58, continuity 1.00
+chords    0.69  8/12          0/13           rhythm 0.75, clash 0.35, register 1.00, continuity 0.87
+melody    0.70  5/8           0/8            harmony 0.63, clash 0.39, register 1.00, rhythm 0.73, shape 1.00, continuity 0.71
+form: intro verse chorus verse2 chorus breakdown finalChorus outro end
+  hook in later chorus phrases 5/5 · chorus melody continuity 1.00 · fills 3/3 · crashes 5/5 · risers 3/3
+
+== all seeds
+role       fit  loop changes  voice changes  terms
+drums     0.86  16/26         0/30           rhythm 0.87, drums 0.83, continuity 1.00
+bass      0.93  13/24         0/26           harmony 0.99, bassRoot 1.00, rhythm 0.79, shape 0.61, clash 1.00, register 1.00, continuity 0.92
+chords    0.75  17/26         0/28           clash 0.49, register 1.00, rhythm 0.84, continuity 0.85
+melody    0.81  11/19         0/19           harmony 0.74, clash 0.70, register 1.00, rhythm 0.78, shape 0.99, continuity 0.69
+band fit 0.84 · melody continuity 0.69
+ensemble (each part scored afterwards against what the others actually played that phrase):
+  drums     0.95  rhythm 0.92, drums 0.96, continuity 0.99 · heard same-phrase: bass 0%, chords 0%, melody 0%
+  bass      0.93  harmony 0.99, bassRoot 1.00, rhythm 0.75, shape 0.61, clash 1.00, register 1.00, continuity 0.92 · heard same-phrase: drums 93%, chords 93%, melody 0%
+  chords    0.83  clash 0.75, register 1.00, rhythm 0.68, continuity 0.85 · heard same-phrase: drums 0%, bass 0%, melody 0%
+  melody    0.82  harmony 0.77, clash 0.72, register 1.00, rhythm 0.71, shape 0.99, continuity 0.69 · heard same-phrase: drums 93%, bass 93%, chords 93%
+  band 0.88
+form: sections in order yes · hook in later chorus phrases 100% · chorus melody continuity 1.00 · fills 9/9 · crashes 10/10 · risers 6/6

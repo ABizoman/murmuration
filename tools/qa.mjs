@@ -17,6 +17,7 @@ import { STYLE_FAMILIES } from '../src/styles.js';
 import { SECTION_PHRASES } from '../src/decide/rules.js';
 import { transitionsIn } from '../src/transitions.js';
 import { POP_FORM } from '../src/form.js';
+import { SONGS } from '../src/songs/index.js';
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => {
@@ -84,7 +85,7 @@ for (const seed of SEEDS) {
   if (form) {
     const at = (p) => directive(p);
     const names = [];
-    for (let p = 0; p < PHRASES; p++) { const d = at(p); if (d.isFirstPhrase) names.push(d.section); }
+    for (let p = 0; p < PHRASES; p++) { const d = at(p); if (d.ended) break; if (d.isFirstPhrase) names.push(d.section); }
     const part = (r, p) => series[r].find((x) => x.phrase === p)?.part;
     let hookHit = 0, hookAll = 0, fills = 0, fillAll = 0, crashes = 0, crashAll = 0, risers = 0, riserAll = 0;
     const cont = [];
@@ -104,17 +105,31 @@ for (const seed of SEEDS) {
       if (!d.isFirstPhrase && tr.crash) formPooled.bad.push(`${seed}: crash mid-section at phrase ${p}`);
       if (!d.nextTransitionIn.includes('riser') && tr.riser) formPooled.bad.push(`${seed}: riser in the wrong place at phrase ${p}`);
     }
-    // sections in order: the written form, then round from verse2 again (form.js)
+    // sections in order: as written (the pop form, or the song's own "form"), then round again
+    // from the loop point, or (ending songs) one "end" coda and nothing more
+    const written = structure.song ? SONGS[structure.song.id].form.map(([name, phrases]) => ({ name, phrases })) : POP_FORM;
+    const loopFrom = structure.song ? form.loopIndex : POP_FORM.findIndex((x) => x.name === 'verse2');
     const want = [];
-    const loopFrom = POP_FORM.findIndex((x) => x.name === 'verse2');
-    for (let i = 0, p = 0; p < PHRASES; i = i + 1 >= POP_FORM.length ? loopFrom : i + 1) { want.push(POP_FORM[i].name); p += POP_FORM[i].phrases; }
+    for (let i = 0, p = 0; p < PHRASES; ) {
+      if (i >= written.length) {
+        if (form.end) { want.push('end'); break; }
+        i = loopFrom;
+      }
+      want.push(written[i].name); p += written[i].phrases; i++;
+    }
     formPooled.order &&= JSON.stringify(names) === JSON.stringify(want);
     // the hook in chorus phrases after the first chorus's first phrase (that one *makes* the hook)
     const firstHook = [...Array(PHRASES).keys()].find((p) => at(p).hook);
     let later = 0, laterHit = 0;
+    // a song's hook is written into its sections: compare the notes with the first chorus's
+    const tune = (x) => JSON.stringify((x?.notes || []).map((n) => [n.step, n.midi]));
+    const firstTune = {};
+    for (let p = firstHook; p < PHRASES; p++) if (at(p).hook && part('melody', p)) firstTune[at(p).phraseInSection] ??= tune(part('melody', p));
     for (let p = firstHook + 1; p < PHRASES; p++) {
       const mel = part('melody', p);
-      if (at(p).hook && mel?.notes.length) { later++; if (/the hook/.test(mel.why)) laterHit++; }
+      if (!at(p).hook || !mel?.notes.length) continue;
+      later++;
+      if (structure.song ? tune(mel) === firstTune[at(p).phraseInSection] : /the hook/.test(mel.why)) laterHit++;
     }
     formPooled.hook[0] += laterHit; formPooled.hook[1] += later;
     formPooled.chorusCont.push(...cont);

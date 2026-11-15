@@ -80,7 +80,8 @@ export class Agent {
 
   // In a hook section, the part's hook loop (hooks.js), if this device has it.
   hookLoop(ctx) {
-    if (!HOOK_ROLES.includes(this.role) || !ctx.hookEntry) return null;
+    // A song with sections already fixes every section's notes: nothing to pin.
+    if (!HOOK_ROLES.includes(this.role) || !ctx.hookEntry || ctx.structure?.sections) return null;
     return this.library.get?.(ctx.hookEntry.loopId) || null;
   }
 

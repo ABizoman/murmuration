@@ -6,6 +6,7 @@ import { PACK_PROGRESSIONS } from './packs.js';
 import { songFromSeed } from './songs/index.js';
 import { MAX_SWING } from './clock.js';
 import { STYLE_FAMILIES, DEFAULT_FAMILY } from './styles.js';
+import { songForm } from './form.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -69,8 +70,16 @@ function structureFromBase(seed) {
   // "song:<id>" plays a fixed song: its own key, tempo and chords, and the agents build it up.
   const song = songFromSeed(seed);
   if (song) {
-    const { id, title, composer, build, voices, react } = song;
-    return { seed, key: song.key, mode: song.mode, bpm: song.bpm, progression: song.progression, swing: clampSwing(song.swing), mood: `${title} (${composer})`, song: { id, title, composer, build, voices, react: !!react } };
+    const { id, title, composer, build, voices, react, register } = song;
+    const out = { seed, key: song.key, mode: song.mode, bpm: song.bpm, progression: song.progression, swing: clampSwing(song.swing), mood: `${title} (${composer})`, song: { id, title, composer, build, voices, react: !!react, register: register || null } };
+    // A song with sections (step E): its form, and each section's chords (render.js chordAt).
+    const form = songForm(song);
+    if (form) {
+      out.form = form;
+      out.sections = Object.fromEntries(Object.entries(song.compiledSections).map(([n, sec]) => [n, { progression: sec.progression }]));
+      if (song.end) out.end = true;
+    }
+    return out;
   }
   const r = seededRandom(seed, 'structure');
   const mode = r() < 0.6 ? 'minor' : 'major';

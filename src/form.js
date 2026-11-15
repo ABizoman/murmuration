@@ -34,8 +34,45 @@ const LOOP_FROM = 'verse2'; // where the form goes back to after the outro
 // The one-phrase coda when the song ends: every part plays one last note on the downbeat.
 export const END_SECTION = { name: 'end', phrases: 1, energy: 0.3, plan: plan('normal', 'normal', 'normal', 'normal'), hook: false, transitionIn: ['crash'], end: true };
 
-// null for songs (a song brings its own form in step E), otherwise the upbeat-pop form.
+// A song's own form (songs/format.js `sections` + `form`), as the same kind of object as the pop
+// form. Each entry of the song's form is one section here, so the transitions can depend on what
+// came before. Defaults by section name, all overridable per section in the song:
+//   energy  intro 0.35, verse 0.5, pre 0.65, chorus 0.9, finalChorus 1, bridge/breakdown 0.4, outro 0.3
+//   plan    a part the section gives notes to plays ('full' in a hook section, else 'normal'),
+//           any other part sits out
+//   transitionIn  hook sections: fill + crash + riser; a verse after a hook: fill + crash;
+//           pre: fill; the first section and everything else: none
+const ENERGY_BY_NAME = { intro: 0.35, verse: 0.5, pre: 0.65, chorus: 0.9, finalChorus: 1, bridge: 0.4, breakdown: 0.4, outro: 0.3 };
+const baseName = (name) => name.replace(/\d+$/, '');
+export function songForm(song) {
+  const defs = song.compiledSections;
+  if (!defs || !song.form) return null;
+  const sections = song.form.map(([name, phrases], i) => {
+    const d = defs[name];
+    const prev = i > 0 ? defs[song.form[i - 1][0]] : null;
+    const plan = {};
+    for (const r of ['drums', 'bass', 'chords', 'melody']) plan[r] = d.plan?.[r] ?? (d.roles.includes(r) ? (d.hook ? 'full' : 'normal') : 'out');
+    let transitionIn = d.transitionIn;
+    if (!transitionIn) {
+      if (i === 0) transitionIn = [];
+      else if (d.hook) transitionIn = ['fill', 'crash', 'riser'];
+      else if (baseName(name) === 'verse' && prev?.hook) transitionIn = ['fill', 'crash'];
+      else if (baseName(name) === 'pre') transitionIn = ['fill'];
+      else transitionIn = [];
+    }
+    return { name, phrases, energy: d.energy ?? ENERGY_BY_NAME[baseName(name)] ?? 0.5, plan, hook: d.hook, transitionIn: [...transitionIn] };
+  });
+  const starts = [];
+  let at = 0;
+  for (const sec of sections) { starts.push(at); at += sec.phrases; }
+  const loopIndex = Math.max(0, song.loopFrom ? song.form.findIndex(([n]) => n === song.loopFrom) : Math.min(1, sections.length - 1));
+  return { sections, starts, length: at, loopIndex, loopStart: starts[loopIndex], end: !!song.end };
+}
+
+// The upbeat-pop form when improvising; a song's own form if it has sections (seed.js puts it on
+// the structure); null for a song without sections.
 export function formFromStructure(structure) {
+  if (structure?.form) return structure.end && !structure.form.end ? { ...structure.form, end: true } : structure.form;
   if (!structure || structure.song) return null;
   const sections = POP_FORM.map((s) => ({ ...s, plan: { ...s.plan }, transitionIn: [...s.transitionIn] }));
   const starts = [];
@@ -97,7 +134,7 @@ export function formDirective(form, phrase, director = DEFAULT_DIRECTIVE) {
     isFirstPhrase: at.isFirstPhrase,
     isLastPhrase: at.isLastPhrase,
     pass: at.pass,
-    transitionIn: at.isFirstPhrase ? [...section.transitionIn] : [],
+    transitionIn: at.isFirstPhrase && !at.ended ? [...section.transitionIn] : [],
     // what leads into the next section (fills and risers go in this phrase's last bar)
     nextTransitionIn: at.isLastPhrase && next && !next.ended ? [...next.section.transitionIn] : [],
     nextSection: at.isLastPhrase && next ? next.section.name : null,

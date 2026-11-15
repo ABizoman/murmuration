@@ -2,19 +2,37 @@
 
 import { parseChord, anchorFor, degreeToMidi, voiceChord } from './theory.js';
 import { BARS_PER_PHRASE } from './clock.js';
+import { sectionAt } from './form.js';
 
+// The chord under a bar. A song with sections (structure.sections, structure.form) uses the current
+// section's own progression, counted from the section's start; the coda is the tonic. Pure in
+// (structure, phrase, bar): render, fit, transform and both screens call it.
 export function chordAt(structure, phrase, barInPhrase) {
+  if (structure.sections && structure.form) {
+    const at = sectionAt(structure.form, phrase);
+    const prog = at && structure.sections[at.section.name]?.progression;
+    if (!prog) return parseChord(structure.mode === 'minor' ? 'i' : 'I', structure.key, structure.mode);
+    return parseChord(prog[(at.phraseInSection * BARS_PER_PHRASE + barInPhrase) % prog.length], structure.key, structure.mode);
+  }
   const p = structure.progression;
   const numeral = p[(phrase * BARS_PER_PHRASE + barInPhrase) % p.length];
   return parseChord(numeral, structure.key, structure.mode);
+}
+
+// Which phrase of its loop a phrase is: songs with sections count from the section's start, so an
+// 8-bar part starts at its beginning whatever phrase the section starts on.
+export function loopPhrase(structure, phrase) {
+  if (!structure.form || !structure.sections) return phrase;
+  return sectionAt(structure.form, phrase)?.phraseInSection ?? phrase;
 }
 
 // Returns { notes: [{ step, dur, vel, midi? | midis? | drum? }], voicing } where step is 0..63 in the phrase.
 export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicing = null, fold = true }) {
   const notes = [];
   let voicing = prevVoicing;
+  const local = loopPhrase(structure, phrase);
   for (let bar = 0; bar < BARS_PER_PHRASE; bar++) {
-    const lb = (phrase * BARS_PER_PHRASE + bar) % loop.bars; // 8-bar loops span two phrases
+    const lb = (local * BARS_PER_PHRASE + bar) % loop.bars; // 8-bar loops span two phrases
     const chord = chordAt(structure, phrase, bar);
     const events = loop.events.filter((e) => e.bar === lb);
     if (loop.role === 'chords' && events.length) voicing = voiceChord(chord, loop.voicing || 3, voicing, register);

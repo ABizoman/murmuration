@@ -32,11 +32,16 @@ const library = createLibrary({ packs: PACK_LOOPS });
 // from a stream fixed by (rng, role), so the same seed + rng make the same music and two
 // recordings can be compared fairly. Without it everything samples from Math.random as before.
 const params = new URLSearchParams(location.search);
-const RNG = params.get('rng');
+// ?demo=<songId>: the demo preset (step E). The song, ending after one pass, reproducible (rng
+// "demo"), director off (a song's form leads), one instrument per part all the way through.
+const DEMO = params.get('demo');
+const RNG = params.get('rng') ?? (DEMO ? 'demo' : null);
 // Dev switches for the mix (Phase 2): ?solo=<role> hears one part on its own, which is how
 // ROLE_GAIN in audio.js is measured; ?lite=1 forces the lite graph, ?lite=0 forbids it.
 const SOLO = ROLES.includes(params.get('solo')) ? params.get('solo') : null;
 const LITE = params.has('lite') ? params.get('lite') !== '0' : null;
+// ?part=<role>: claim this part if nobody has it (the demo's speaker laptop takes the drums).
+const PART = ROLES.includes(params.get('part')) ? params.get('part') : DEMO ? 'drums' : null;
 // ?feel=off: no swing and no humanising on this device, for a straight-grid "before" clip.
 // Local to the URL that sets it: never use it while several devices play together.
 const FEEL = params.get('feel') !== 'off';
@@ -73,11 +78,13 @@ let tickTimer = null;
 // The form (improvising: the upbeat-pop form; songs: none until step E) and the shared hooks.
 let form = null;
 let formSeed = null; // the seed the hooks belong to
+const songHasForm = () => !!(form && engine.structure?.song);
 const hookBook = new HookBook();
 
 const swarm = new Swarm({
   localNow,
   signalUrl: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/signal`,
+  preferRole: PART,
   getPosition: () => engine.position(),
   events: {
     log,
@@ -177,14 +184,15 @@ const engine = new Engine({
   onEvent,
   onPlan: (phrase, ctxs, deadlineMs) => {
     jev.plan(phrase, ctxs, deadlineMs);
-    director.maybePropose(phrase, () => describeForDirector(phrase));
+    if (!songHasForm()) director.maybePropose(phrase, () => describeForDirector(phrase));
   },
   getAdvice: (phrase, role) => jev.advice(phrase, role),
   // Phase 3d: the drums, chords and bass prepare their candidates half a bar early and Jev ranks them.
   onCandidates: (phrase, role, prepared, deadlineMs) => jev.rank(phrase, role, prepared, deadlineMs),
   getCandidateAdvice: (phrase, role) => jev.ranking(phrase, role),
   // The form leads and the director nudges (form.js); with no form, the director alone.
-  getDirective: (phrase) => (form ? formDirective(form, phrase, director.directiveFor(phrase)) : director.directiveFor(phrase)),
+  // A song with sections ignores the director: the song's form is the arrangement, on every device.
+  getDirective: (phrase) => (form ? formDirective(form, phrase, songHasForm() ? DEFAULT_DIRECTIVE : director.directiveFor(phrase)) : director.directiveFor(phrase)),
   swing: FEEL,
   hooks: hookBook,
   id: swarm.id,
@@ -303,6 +311,25 @@ function updateButton() {
   }
 }
 
+// --- Demo preset --------------------------------------------------------------------
+// ?demo=<songId> or Menu -> Demo: pick the song, tick "End after one pass", and press Start.
+function prepareDemo(id) {
+  if (!SONGS[id] || swarm.song) return false;
+  $('song').value = id;
+  $('seed').disabled = true;
+  if ($('endAfterPass')) $('endAfterPass').checked = true;
+  showStructure(chosenSeed());
+  return true;
+}
+$('demoStart')?.addEventListener('click', () => {
+  if (swarm.playing) return log('leave the current song first');
+  if (prepareDemo('murmur-pop')) $('start').click();
+});
+if (DEMO) {
+  if (prepareDemo(DEMO)) setTimeout(() => log(`<b>demo</b>: "${esc(SONGS[DEMO].title)}" is ready — press Start (rng "${esc(RNG)}")`), 0);
+  else setTimeout(() => log(`no song "${esc(DEMO)}" for the demo`), 0);
+}
+
 // --- Listening tools: record a clip, read the master meters -------------------------
 
 // The seed of what is playing (or about to), for the clip's file name.
@@ -403,7 +430,7 @@ function renderDirection() {
   const j = jev.stats;
   const sec = form && pos ? describeSection(form, Math.max(0, pos.phrase)) : '';
   $('direction').innerHTML =
-    (sec ? `<div>song form: <b>${esc(sec)}</b></div>` : '') +
+    (sec ? `<div>song form: <b>${esc(sec)}</b>${songHasForm() ? ' · the song leads (director off)' : ''}</div>` : '') +
     `<div><b>${esc(describeDirective(d))}</b>${d.note ? ` — “${esc(d.note)}”` : ''}</div>` +
     `<div class="why">${cur ? `section ${cur.section + 1}, proposed by ${esc(cur.by)} (${esc(cur.source)})${cur.votes ? `, ${cur.votes} votes` : ''}` : 'no direction adopted yet: default'} · director here: ${esc(director.status)}</div>` +
     `<div class="why">Jev: ${esc(j.state)}${j.source ? ` (${esc(j.source)})` : ''} · answered in time ${j.inTime}/${j.asked}${j.ranked ? ` (ranked ${j.ranked} candidate sets)` : ''}${j.late ? `, too late ${j.late}` : ''}${j.failed ? `, failed ${j.failed}` : ''}${j.lastMs != null ? ` · last ${j.lastMs} ms` : ''}</div>`;

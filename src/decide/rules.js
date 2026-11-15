@@ -52,8 +52,8 @@ export function ruleScores(ctx, library) {
   // ---- 1. How busy --------------------------------------------------------------
   let level;
   const song = ctx.structure?.song;
-  if (song) {
-    level = songLevel(ctx, song, dir, active, last, reasons);
+  if (song && !dir.plan) {
+    level = songLevel(ctx, song, dir, active, last, reasons); // a song without sections builds itself up
   } else if (!dir.plan && ctx.phrase < ENTRY[role]) {
     level = { 0: 1 }; // with a form, the intro and verse plans decide who comes in when
     reasons.push({ text: 'waiting for my entry' });
@@ -89,16 +89,18 @@ export function ruleScores(ctx, library) {
     }
     level[0] = ctx.phrase >= ENTRY[role] + 2 && last?.level > 0 && role !== 'chords' ? 0.012 : 0; // a rare breath
   }
-  if (!song && dir.plan?.[role]) level = clampToPlan(level, dir.plan[role], dir.energy, reasons);
+  if (dir.plan?.[role]) level = clampToPlan(level, dir.plan[role], dir.energy, reasons); // the form's plan (improvising, or a song with sections)
 
   // ---- 2. Which pattern ---------------------------------------------------------
   const family = familyOf(ctx.structure); // null in song mode
   let style = {};
-  for (const s of library.styles(role)) {
+  // A song with sections: the section's own part, nothing else.
+  const sectionStyle = song && ctx.structure.sections && dir.section ? `song-${song.id}-${dir.section}` : null;
+  for (const s of sectionStyle && library.styles(role).includes(sectionStyle) ? [sectionStyle] : library.styles(role)) {
     const e = STYLE_ENERGY[`${role}/${s}`] ?? library.styleEnergy?.(role, s) ?? 0.5;
     style[s] = (library.styleWeight?.(role, s) ?? 1) * familyWeight(family, 'styles', role, s) * Math.exp(-((e - dir.energy) ** 2) / 0.12);
   }
-  if (last?.style && last.style in style) {
+  if (!sectionStyle && last?.style && last.style in style) {
     // With many styles to choose from, "keep it" has to win most of the time or the groove
     // changes every phrase: make the current style a fixed share of the total.
     const held = runLength(history, 'style');
@@ -118,7 +120,8 @@ export function ruleScores(ctx, library) {
 
   // ---- 3. Which register --------------------------------------------------------
   const register = {};
-  for (const r of song ? [0] : REGISTERS[role]) {
+  // A song plays in its own register: 0, or what it asks for per part (register: { melody: 1 }).
+  for (const r of song ? [[-1, 0, 1].includes(song.register?.[role]) ? song.register[role] : 0] : REGISTERS[role]) {
     let w = REGISTER_PRIOR[role]?.[r] ?? 1;
     if (role !== 'drums') {
       const centre = CENTRE[role] + 12 * r;
@@ -157,6 +160,12 @@ export function ruleScores(ctx, library) {
   // ---- 5. Which instrument (only at the start of a section) ----------------------
   const voice = {};
   const current = last?.voice && voiceById[last.voice] ? last.voice : null;
+  // A song with sections keeps one instrument per part all the way through: the first it lists.
+  // (Every device gets the same answer, however it joined.)
+  if (song && ctx.structure.sections) {
+    const fixed = song.voices?.[role]?.find((id) => voiceById[id]) ?? DEFAULT_VOICE[role];
+    return { level, style, register, interaction, voice: { [fixed]: 1 }, reasons };
+  }
   // Improvising: at a section start, at most one part changes instrument, the one that has held its
   // instrument longest (and at least VOICE_HOLD_SECTIONS sections). See voiceTurn().
   const myTurn = !current || song || voiceTurn(ctx) === role;

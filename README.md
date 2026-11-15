@@ -97,8 +97,35 @@ downbeat of choruses and verse2, and a **riser** under the bar before each choru
 
 **End after one pass** (Menu → Song, or the checkbox on `classic.html`) adds `#end` to the seed, so
 every device that joins knows: after the outro the band plays one last chord together and every
-device leaves the song on its own ("the song ended" in the log). Songs from `src/songs/` have no
-form yet (that is step E).
+device leaves the song on its own ("the song ended" in the log). Songs can bring their own form
+(sections, see `docs/ADDING_SONGS.md`); songs without one build themselves up as before.
+
+## Demo checklist
+
+The demo song is **Murmur** (`src/songs/murmur-pop.js`, an original first draft, about 2:27). Its
+arrangement is the story: the drums start alone, then the bass, then the chords, then the melody.
+
+1. **Before**: laptop on the speakers, `node server.js`, phones on the same Wi-Fi. Open the page on
+   the laptop with `http://localhost:8000/?demo=murmur-pop` (or Menu → Song → **Demo: Murmur**).
+   That picks the song, ticks "End after one pass", fixes the random stream (`rng=demo`), so the
+   run is the one you rehearsed, and makes the laptop claim the **drums** (`?part=drums`; any
+   device can ask for a part this way). Song mode turns the director off (the song's form leads) and keeps
+   one instrument per part, on every device, however it joined.
+2. **Start** on the laptop: it covers every part at first, but the intro is drums only.
+3. **Phones join** (scan the QR code, press **Join the song**) during the intro and verse: the
+   first phone takes the chords, the second the bass, the third the melody (the swarm's usual
+   order); a part with no phone of its own is covered by one of the devices. The song itself brings
+   the bass in on phrase 2, the chords on phrase 3 and the melody on the pre-chorus (phrase 5),
+   whichever device has them, so the build-up is the same however fast the phones join.
+4. **Resilience moments** (any time after the first chorus):
+   - put the melody phone in **airplane mode**: within a beat or two another device takes the
+     melody over and the hook carries on; turn airplane mode off and the phone rejoins.
+   - **kill the server** (Ctrl+C): the phones already have direct links and the shared clock;
+     nothing stops. Jev falls back to the rules (offline), and a song needs no director.
+5. **The end**: after the outro everyone plays one last chord, and every device leaves the song on
+   its own ("the song ended").
+
+Also available: `?demo=ode-to-joy-pop` (a pop arrangement of Beethoven's theme, about 1:55).
 
 ## The mix
 

@@ -616,3 +616,71 @@ mix, feel and scoring are unaffected.
 - [ ] With a phone per part: do the parts sound more "together"? Especially the melody against the
       chords (the clash numbers above suggest the sourness should be less across devices).
 - [ ] The drums and chords now decide 2 bars ahead: a director change lands 1 bar later for them.
+
+## Step E (Phase 7) — songs with sections, two demo songs, the demo preset
+
+### Built
+- **E1** `src/songs/format.js`: `sections` + `form` (+ `end`, `register`, `loopFrom`). Each
+  section's parts compile to loops of style `song-<id>-<section>`, each part written once (every
+  density is the part as written); errors name song, section, part and bar. `src/form.js`
+  `songForm(song)` turns the song's form into the same kind of form object as the pop form
+  (defaults by section name for energy, plan and transitions; each overridable per section);
+  `seed.js` puts `form` and the sections' progressions on the structure; `formFromStructure`
+  returns it. `render.js` `chordAt` uses the current section's progression counted from the
+  section start (the coda is the tonic), and `loopPhrase` makes an 8-bar part start at its
+  section's start. `rules.js` song mode with sections: the section's style only, the form's plan
+  decides who plays (a role missing from a section rests), one instrument per part (the first the
+  song lists), and the song's `register`. Songs without sections are unchanged (tested).
+- **E2** `src/songs/murmur-pop.js` — **"Murmur", an original first draft** (A major, 116 bpm,
+  ~2:27): intro (drums) · intro2 (+ bass) · verse (+ chords, half-time drums) · pre (+ melody) ·
+  chorus (hook) · verse2 · pre · chorus · bridge · finalChorus · outro · last chord. Chorus hook
+  `C#-C#-C#-B-C#-E | B-G#-E-B`, answered in bars 3–4 reaching up to F#; verse melody on the same
+  rhythm, lower; bass roots/fifths in the verse and an eighth-note pulse with four-on-the-floor in
+  the chorus; chords on piano with a push on the "and" of 4. `src/songs/ode-to-joy-pop.js` —
+  Beethoven's theme at 120 bpm in D: synth bass, synth pluck an octave above the piano, pop drums,
+  a chords-only breakdown (~1:55). The old `ode-to-joy` is unchanged.
+- **E3** `?demo=<songId>` (and Menu → Song → **Demo: Murmur**): picks the song, ticks "End after
+  one pass", `rng=demo` unless given, and the device claims the drums (`?part=<role>`, new: the
+  swarm's `nextClaim` takes a preferred role if nobody owns it). Songs with a form switch the
+  director off on every device (`getDirective` passes the default directive; no proposals) and the
+  director panel says "the song leads (director off)". README: **Demo checklist**.
+  `docs/ADDING_SONGS.md`: "Songs with sections".
+- `npm run qa` checks songs against their own written form and compares the chorus melody notes.
+  `test/stepE.test.mjs` (8 tests).
+
+### Judgement calls and deviations
+1. **With sections, the form is the arrangement**: who plays when comes from the sections, not
+   from `songLevel()`'s randomised build-up (the handoff kept the build-up for first entries). The
+   demo has to be repeatable and on time; the random entry could leave the melody out of the first
+   chorus. Songs without sections still build themselves up.
+2. **The director is off and instruments are fixed for every song with sections**, not only with
+   `?demo=`: a phone that joins from the QR code (no URL parameters) must decide the same way as the
+   laptop, so these can only depend on the shared seed.
+3. **`?part=drums` was needed for "the speaker device plays the drums"**: the swarm's claim order is
+   chords, drums, bass, melody, so the first device used to take the chords.
+4. **"Pushed chords tied into the next bar"** can't be written in the chord-rhythm notation (`x`
+   plays the *current* bar's chord, and bars don't tie), so the push is a hit on the "and" of 4 of
+   the same chord.
+5. The fit scores of written songs are low in places (Ode to Joy: melody clash 0.39): the clash
+   term counts Beethoven's passing tones (a G over the held F# on beat 3) as clashes. A song's notes
+   are fixed, so the score changes nothing; noted rather than "fixed".
+6. A song's notes are fixed per section, so the hook book does not pin anything in songs.
+
+### Measured
+- Tests: **144 passing**.
+- `npm run qa -- --seeds song:murmur-pop,song:ode-to-joy-pop --phrases 20`: sections in order
+  **yes**; chorus melody identical in every later chorus **100%**; fills 9/9, crashes 10/10,
+  risers 6/6; every device kept one instrument per part; both songs end on the coda.
+- Improvising (`npm run qa`) unchanged from D.
+- **Demo rehearsal in headless Chrome, two devices over WebRTC**: laptop `?demo=murmur-pop`
+  claimed the drums; a second page joined from `/`, claimed the chords and covered bass and
+  melody; every section played in order with "the song leads (director off)"; both devices logged
+  "the song ended" at the same moment, 2:27 into the song; no page errors.
+
+### Needs the humans
+- [ ] **Approve or replace Murmur's melody** (`src/songs/murmur-pop.js`, `CHORUS_MELODY` and the
+      verse2 / pre / bridge melodies). It is a first draft.
+- [ ] Listen to the whole demo: `http://localhost:8000/?demo=murmur-pop`, press Start.
+- [ ] Rehearse the resilience moments from the README checklist on real phones (airplane mode on
+      the melody phone; killing the server).
+- [ ] The melody sourness (deferred from step B) — still to do at the end.
