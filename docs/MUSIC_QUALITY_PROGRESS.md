@@ -775,3 +775,29 @@ plain, the beat is wrong, and it is too happy or bright. So:
 - The Menu shows "verse … · chorus …".
 - Tests **149**; `npm run qa` (`docs/qa/H1-section-chords.txt`): ensemble band fit 0.95 (unchanged),
   sections, hooks and transitions all in place. Headless Chrome: no page errors.
+
+## Round 2, step 2 — three extra parts (pad, arp, perc), a device each
+
+- `ROLES` is now 7: the core band plus `pad`, `arp`, `perc` (`loops.js`, with `CORE_ROLES`,
+  `ROLE_KIND`, `kindOf`: pad renders like chords, arp like a melody, perc like drums). Render,
+  midi-import, the song compiler, feel and transforms dispatch on the kind.
+- Built-in loops: `pad/wash`, `pad/swell` (one chord per bar at most), `arp/arp`, `arp/bounce`
+  (chord notes up/down), `perc/shaker`, `perc/tamb`. Voices: `pad-warm` (synth), `pad-strings`,
+  `pad-choir` (samples); `arp-pluck`, `arp-riff` (synth), `arp-epiano` (samples); `perc-shaker`
+  (synth patch `perc`: shaker + tambourine into the hats strip). Style weights for both styles.
+- Swarm claim order `chords, drums, bass, melody, pad, arp, perc`; fewer devices cover the rest.
+- Horizons: drums/chords/pad 2 bars, perc/bass 1.5, melody 1, arp 0.75 (so the arp hears the
+  melody); plans grouped by horizon.
+- Form plans (`POP_FORM`): pad light from the verse, arp/perc light in the pre-chorus, full in
+  choruses, only the pad stays in the breakdown. Songs: a part a section doesn't write rests.
+- Mix: `pad` strip (chords bus, so it pumps; more hall, top cut), `arp` strip (melody bus, pan
+  0.25, more delay); `shaker`/`tamb` route to hats. One synth instance per (patch, part).
+- Fit: terms for the new parts; **clash now only compares same-phrase parts** (stale parts sat over
+  other chords and gave false clashes once each section had its own chords).
+- Murmur has pad, arp (8ths, 16ths in the final chorus) and shaker/tambourine parts.
+- UI: colours, labels, flock reactions, instruction words, the MIDI import role list.
+- `measure-levels --gate 15` (ignore silent stretches). Gains: pad-warm 11, arp-pluck 24,
+  arp-riff 8.5, perc-shaker 13 (pad ≈ chords −3 dB, arp ≈ melody −5, perc ≈ drums −9; arp-riff
+  and the sampled layer voices are estimated, not measured).
+- QA (7 devices, `docs/qa/H2-seven-parts.txt`): ensemble band 0.91, chords clash 0.98, pad 0.97,
+  arp 0.98; form checks all pass. Tests **156**.

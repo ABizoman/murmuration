@@ -1,7 +1,7 @@
 // A directive is the band's general direction for a section (4 phrases). It only shifts the
 // weights in rules.js; it never dictates notes. Shared by the browser and the server.
 
-export const DIRECTIVE_ROLES = ['drums', 'bass', 'chords', 'melody'];
+export const DIRECTIVE_ROLES = ['drums', 'bass', 'chords', 'melody', 'pad', 'arp', 'perc'];
 export const DEFAULT_DIRECTIVE = { energy: 0.5, feature: null, drop: null, pair: null, note: '' };
 
 const role = (x) => (DIRECTIVE_ROLES.includes(x) ? x : null);

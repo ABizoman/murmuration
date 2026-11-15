@@ -2,7 +2,7 @@
 // `npm run qa` (tools/qa.mjs) and by tests that want app-like numbers.
 //
 //   devices: 1  one engine plays all four parts (a laptop on its own)
-//   devices: 4  four engines, one part each, gossiping parts and hooks to each other after
+//   devices: 4  (any number > 1) one engine per part, gossiping parts and hooks to each other after
 //               `latencyMs` (the demo: a phone per part). This is where staggered decisions
 //               (Phase 6) matter: on one engine the later parts already hear the earlier ones.
 //
@@ -42,9 +42,9 @@ export function simulateBand({ seed = 'durhack', rng = 'qa', phrases = 40, getDi
   const played = [];
   const events = [];
   const queue = []; // gossip in flight: { at, to, fn }
-  const groups = devices === 4 ? ROLES.map((r) => [r]) : [ROLES];
+  const groups = devices > 1 ? ROLES.map((r) => [r]) : [ROLES];
   const engines = groups.map((mine, i) => {
-    const id = devices === 4 ? `dev-${mine[0]}` : 'local';
+    const id = devices > 1 ? `dev-${mine[0]}` : 'local';
     const e = new Engine({
       agents: ROLES.map((r) => new Agent(r, library, randomFor(rng, r), agentOptions)),
       now: () => t,

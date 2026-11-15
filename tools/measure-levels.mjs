@@ -15,6 +15,7 @@
 //   npm run measure-levels -- --full             also play the whole band and check peak and clips
 //   npm run measure-levels -- --extra voice=chords:synth-pad   extra URL params for every run
 //   npm run measure-levels -- --roles bass,chords
+//   npm run measure-levels -- --gate 15            ignore the silent stretches (parts that rest a lot)
 //
 // Browser: Playwright's own Chromium if installed (`npx playwright install chromium`), otherwise
 // the system Chrome. Tone.js normally comes from unpkg; the tool serves node_modules/tone instead,
@@ -37,7 +38,11 @@ const SECONDS = Number(opt('seconds', 40));
 const ROLES = opt('roles', 'drums,bass,chords,melody').split(',');
 const EXTRA = opt('extra', '');
 const SEED = opt('seed', 'levels');
-const TARGET = { drums: 0, bass: 0, chords: -2, melody: -1 }; // relative to the drums/bass level
+// --gate 15: ignore loudness readings more than 15 dB below the loudest (the stretches where the
+// part rests), like a gated loudness meter. Needed for parts that only play in some sections.
+const GATE = Number(opt('gate', 0));
+// relative to the drums/bass level; the extra layers sit under the band
+const TARGET = { drums: 0, bass: 0, chords: -2, melody: -1, pad: -5, arp: -6, perc: -9 };
 const TONE_JS = `${ROOT}node_modules/tone/build/Tone.js`;
 
 const freePort = () =>
@@ -70,7 +75,11 @@ async function launch() {
 
 // Energy average of the loudness readings (the meter's own loudness is a 2 s running average).
 const powerMean = (dbs) => {
-  const xs = dbs.filter(Number.isFinite);
+  let xs = dbs.filter(Number.isFinite);
+  if (GATE > 0 && xs.length) {
+    const top = Math.max(...xs);
+    xs = xs.filter((d) => d >= top - GATE);
+  }
   if (!xs.length) return -Infinity;
   return 10 * Math.log10(xs.reduce((a, d) => a + 10 ** (d / 10), 0) / xs.length);
 };

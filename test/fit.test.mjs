@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fitScore, describeFit, metric, onsets, jaccard, inRange, spread, WEIGHTS, TERMS } from '../src/decide/fit.js';
 import { candidateDecisions, candidatePrior, pickCandidate, CANDIDATE_QUESTIONS, CONTINUITY_BONUS } from '../src/decide/select.js';
-import { createLibrary, ROLES } from '../src/loops.js';
+import { createLibrary, ROLES , kindOf } from '../src/loops.js';
 import { Agent, CANDIDATES } from '../src/agent.js';
 import { Engine } from '../src/engine.js';
 import { stepMs } from '../src/clock.js';
@@ -97,9 +97,9 @@ test('clash: a held semitone against the chords is caught, a whole step is not',
   const bassF = { bass: peer('bass', [hold(41, 0, 16)]) }; // F
   const tritone = score([hold(71, 0, 2)], 'melody', bassF).terms.clash; // B against F
   assert.equal(tritone, 1 - (1 - semitone) / 2, 'a tritone against the bass costs half a semitone');
-  // a stale peer counts half as much as one that is for this phrase
+  // a stale peer (last phrase's part) cannot clash: its notes sat over other chords
   const stale = { chords: peer('chords', [chordHold([60, 64, 67])], { phrase: -1 }) };
-  assert.equal(score([hold(65, 0, 2)], 'melody', stale).terms.clash, 1 - (1 - semitone) / 2);
+  assert.equal(score([hold(65, 0, 2)], 'melody', stale).terms.clash, undefined);
   assert.equal(score([hold(65)], 'melody').terms.clash, undefined, 'nobody to clash with');
 });
 
@@ -203,11 +203,12 @@ test('drums: the kick follows the bass, the backbeat stays, fills wait for the l
 test('fitScore: only the role\'s own terms, weighted, and an empty part is neutral', () => {
   const peers = { chords: peer('chords', [chordHold([60, 64, 67])]), bass: peer('bass', [hold(36, 0, 16)]), drums: peer('drums', [drum('kick', 0)]) };
   for (const role of ROLES) {
-    const notes = role === 'drums' ? [drum('kick', 0), drum('snare', 4)] : [hold(role === 'bass' ? 36 : 79, 0, 8)];
+    const kind = kindOf(role);
+    const notes = kind === 'drums' ? [drum('kick', 0), drum('snare', 4)] : [hold(role === 'bass' ? 36 : 79, 0, 8)];
     const { total, terms } = score(notes, role, peers);
     assert.ok(total >= 0 && total <= 1, `${role} total ${total}`);
     for (const name of Object.keys(terms)) assert.ok(TERMS[role].includes(name), `${role} should not be judged on ${name}`);
-    assert.ok(Object.keys(terms).length >= 2, `${role} got ${Object.keys(terms).length} terms`);
+    assert.ok(Object.keys(terms).length >= (role === 'perc' ? 1 : 2), `${role} got ${Object.keys(terms).length} terms`);
   }
   // the total is the weighted mean of the terms present
   const { total, terms } = score([hold(79, 0, 8), hold(81, 8, 8), hold(79, 16, 8)], 'melody', peers);

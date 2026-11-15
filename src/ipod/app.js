@@ -18,7 +18,7 @@ import { Flock, textPoints } from '../live/flock.js';
 const $ = (id) => document.getElementById(id);
 const mm = () => window.murmuration;
 const setText = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
-const LABELS = { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody' };
+const LABELS = { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody', pad: 'Pad', arp: 'Arpeggio', perc: 'Percussion' };
 const css = getComputedStyle(document.documentElement);
 const COLORS = ROLES.map((r) => css.getPropertyValue(`--${r}`).trim());
 const RI = Object.fromEntries(ROLES.map((r, i) => [r, i]));
@@ -166,6 +166,13 @@ function onNote(role, n, mine, now) {
     else flock.light(ri, 0.02 * amp, 160, now);
   } else if (role === 'bass') { bassDrop = Math.min(1, bassDrop + 0.5 * amp); flock.light(ri, 0.04 * amp, 380, now); }
   else if (role === 'chords') { flock.light(ri, 0.12 * amp, 700, now); chordGlow = 1; }
+  else if (role === 'pad') { flock.light(ri, 0.06 * amp, 1400, now); chordGlow = Math.max(chordGlow, 0.5); } // a slow glow
+  else if (role === 'perc') flock.light(ri, 0.015 * amp, 120, now); // a shimmer
+  else if (role === 'arp') {
+    const pitch = n.midi ?? 64;
+    const y = H * (0.75 - Math.min(1, Math.max(0, (pitch - 50) / 36)) * 0.6);
+    spark(cx + (Math.random() - 0.5) * 40 * S, cy + (Math.random() - 0.5) * 40 * S, (30 + Math.random() * 60) * S, (y - cy) * 0.3, COLORS[ri], 1, 0.8);
+  }
   else if (role === 'melody') {
     const pitch = n.midi ?? (n.midis ? n.midis[0] : 72);
     const y = H * (0.75 - Math.min(1, Math.max(0, (pitch - 55) / 36)) * 0.6);

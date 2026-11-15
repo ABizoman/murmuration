@@ -68,6 +68,22 @@ export const VOICES = {
   ],
 };
 
+// The extra layers (round 2, step 2). Ids are never shared across parts: a part's voices route to
+// its own channel strip.
+VOICES.pad = [
+  { id: 'pad-warm', label: 'Warm pad', synth: 'pad', energy: 0.4, family: 'synth', weight: 1.2, gain: 11 },
+  { id: 'pad-strings', label: 'Strings', dir: 'string_ensemble_1', files: OCT(2, 6), energy: 0.4, family: 'strings', release: 1.2, weight: 1, gain: -1 },
+  { id: 'pad-choir', label: 'Choir', dir: 'choir_aahs', files: OCT(2, 6), energy: 0.3, family: 'voice', release: 1, weight: 0.6, gain: 5 },
+];
+VOICES.arp = [
+  { id: 'arp-pluck', label: 'Arp pluck', synth: 'pluck', energy: 0.6, family: 'synth', weight: 1.2, gain: 24 },
+  { id: 'arp-riff', label: 'Arp synth', synth: 'riff', energy: 0.65, family: 'synth', weight: 1, gain: 8.5 },
+  { id: 'arp-epiano', label: 'Arp e-piano', dir: 'electric_piano_1', files: OCT(3, 6), energy: 0.4, family: 'keys', release: 0.6, weight: 0.8, gain: 1 },
+];
+VOICES.perc = [
+  { id: 'perc-shaker', label: 'Shaker & tambourine', synth: 'perc', energy: 0.6, family: 'perc', weight: 1, gain: 13 },
+];
+
 export const voiceById = Object.fromEntries(Object.values(VOICES).flat().map((v) => [v.id, v]));
-export const DEFAULT_VOICE = { drums: 'kit-acoustic', bass: 'bass-electric', chords: 'keys-piano', melody: 'sax-alto' };
+export const DEFAULT_VOICE = { drums: 'kit-acoustic', bass: 'bass-electric', chords: 'keys-piano', melody: 'sax-alto', pad: 'pad-warm', arp: 'arp-pluck', perc: 'perc-shaker' };
 export const DRUM_FILES = ['kick', 'snare', 'hihat', 'tom1', 'tom2', 'tom3'];

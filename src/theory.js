@@ -54,6 +54,8 @@ export const REGISTERS = {
   bass: { low: 33, high: 44 }, // root placed between A1 and G#2
   chords: { center: 62 },
   melody: { low: 60, high: 71 }, // root placed in the octave from C4
+  arp: { low: 55, high: 66 }, // just under the melody
+  pad: { center: 67 }, // held chords, a little above the chords part
 };
 
 export function anchorFor(role, chord, register = 0) {
@@ -69,9 +71,9 @@ export function degreeToMidi(deg, oct, chord, anchor) {
 }
 
 // Chord voicing with simple voice leading: pick the inversion closest to the previous voicing.
-export function voiceChord(chord, size, prev, register = 0) {
+export function voiceChord(chord, size, prev, register = 0, role = 'chords') {
   const pcs = size >= 4 ? [...chord.pcs, chord.seventhPc] : chord.pcs;
-  const center = REGISTERS.chords.center + 12 * register;
+  const center = (REGISTERS[role]?.center ?? REGISTERS.chords.center) + 12 * register;
   const candidates = [];
   for (let bottom = center - 10; bottom <= center + 2; bottom++) {
     if (!pcs.includes(((bottom % 12) + 12) % 12)) continue;

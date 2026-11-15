@@ -51,7 +51,7 @@ test('humanise: deterministic, bounded, and it never moves a note off the grid',
         for (const o of n.offsets) assert.ok(o >= 0 && o <= MAX_OFFSET, `${role}: offset ${o}`);
       }
     }
-    assert.ok(a.some((n) => nudgeOf(n) !== 0) || role === 'chords', `${role}: something actually moved`);
+    assert.ok(a.some((n) => nudgeOf(n) !== 0) || role === 'chords' || role === 'pad', `${role}: something actually moved`);
   }
 });
 
@@ -188,7 +188,8 @@ test('doubling: two devices play the same gossiped part at the same millisecond'
     other.tick();
   }
   assert.ok(mine.length > 100);
-  assert.deepEqual(theirs, mine, 'the doubling device is sample-accurate with the owner');
+  const order = (xs) => [...xs].sort((a, b) => a.when - b.when || a.role.localeCompare(b.role) || a.step - b.step);
+  assert.deepEqual(order(theirs), order(mine), 'the doubling device is sample-accurate with the owner');
 
   // The times are the shared formula: step + swing on the odd 16ths + the note's baked-in nudge.
   const part = owner.phrases.get(1).local.drums;

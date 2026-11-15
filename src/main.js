@@ -554,7 +554,7 @@ $('mFile').addEventListener('change', async (e) => {
 
 const canvas = $('grid');
 const ctx = canvas.getContext('2d');
-const DRUM_Y = { kick: 0.85, snare: 0.55, hat: 0.25, ohat: 0.25, crash: 0.08, riser: 0.08 };
+const DRUM_Y = { kick: 0.85, snare: 0.55, hat: 0.25, ohat: 0.25, crash: 0.08, riser: 0.08, shaker: 0.4, tamb: 0.6 };
 
 function drawPhrase(parts, y0, h, playhead) {
   const W = canvas.width, dpr = devicePixelRatio;

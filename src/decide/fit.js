@@ -18,6 +18,9 @@ export const WEIGHTS = { harmony: 3, bassRoot: 2, clash: 3, register: 2, rhythm:
 
 // Which terms each role is judged on.
 export const TERMS = {
+  pad: ['clash', 'register', 'continuity'],
+  arp: ['harmony', 'clash', 'register', 'continuity'],
+  perc: ['rhythm', 'continuity'],
   drums: ['rhythm', 'continuity', 'drums'],
   bass: ['harmony', 'bassRoot', 'clash', 'register', 'rhythm', 'shape', 'continuity'],
   chords: ['clash', 'register', 'rhythm', 'continuity'],
@@ -30,7 +33,7 @@ export const metric = (step) => {
   return s === 0 ? 1 : s === 8 ? 0.8 : s === 4 || s === 12 ? 0.6 : s % 2 === 0 ? 0.35 : 0.2;
 };
 
-const PITCHED = ['bass', 'chords', 'melody'];
+const PITCHED = ['bass', 'chords', 'melody', 'pad', 'arp'];
 const SNARE = new Set(['snare', 'clap', 'rim']);
 const TOM = new Set(['tom1', 'tom2', 'tom3']);
 const WEAK = 0.35; // a step this unimportant can carry a passing note
@@ -131,6 +134,9 @@ function clash(notes, ctx, structure, phrase) {
   for (const r of PITCHED) {
     if (r === ctx.role) continue;
     const peer = ctx.peers?.[r];
+    // Only a part for the *same* phrase can clash: last phrase's notes sat over other chords (and
+    // with a chord change per section, comparing against them flags clashes that never sound).
+    if (peer && peer.phrase !== ctx.phrase) continue;
     const theirs = peer?.notes?.length ? line(peer.notes) : [];
     if (!theirs.length) continue;
     compared = true;
@@ -240,7 +246,7 @@ const contour = (notes) => {
 // How similar to my own last phrase each role should be. A melody should vary; a pop drummer
 // repeats the groove exactly, and the bass and chords mostly do (step A5: an identical drum
 // phrase used to score 0.17 here, which made the drums swap loop every other phrase).
-export const CONTINUITY_TARGET = { drums: [0.8, 1], bass: [0.5, 0.9], chords: [0.5, 0.9], melody: [0.4, 0.75] };
+export const CONTINUITY_TARGET = { drums: [0.8, 1], bass: [0.5, 0.9], chords: [0.5, 0.9], melody: [0.4, 0.75], pad: [0.7, 1], arp: [0.6, 1], perc: [0.8, 1] };
 
 // How alike two parts are: half rhythm, half melodic shape (just rhythm for drums).
 export function similarity(notes, ref) {

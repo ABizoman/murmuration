@@ -210,7 +210,8 @@ test('family: unlisted instruments are possible but rare (10,000 draws)', () => 
 const summary = (role, phrase, voice, voiceSince) => ({ role, phrase, voice, voiceSince, level: 2, notes: [{}] });
 
 test('voiceTurn: only at a section start, only after two sections, longest first, ties rotate', () => {
-  const before = (since) => Object.fromEntries(ROLES.map((r) => [r, summary(r, 7, VOICES[r][0].id, since[r])]));
+  // the extra layers changed instrument recently in these cases, so the core band's turn is tested
+  const before = (since) => Object.fromEntries(ROLES.map((r) => [r, summary(r, 7, VOICES[r][0].id, since[r] ?? Math.max(0, (since.at ?? 12) - 4))]));
   const ctx = (role, phrase, since) => { const b = before(since); for (const r of ROLES) b[r].phrase = phrase - 1; return { role, phrase, last: b[role], before: b }; };
   assert.equal(voiceTurn(ctx('bass', 9, { drums: 0, bass: 0, chords: 0, melody: 0 })), null, 'not a section start');
   assert.equal(voiceTurn(ctx('bass', 4, { drums: 0, bass: 0, chords: 0, melody: 0 })), null, 'nobody has held two sections yet');
@@ -218,8 +219,9 @@ test('voiceTurn: only at a section start, only after two sections, longest first
   // every role computes the same answer
   for (const r of ROLES) assert.equal(voiceTurn(ctx(r, 12, { drums: 8, bass: 0, chords: 4, melody: 4 })), 'bass');
   // all tied: the rotation picks a different role at successive section starts
-  const tied = [16, 20, 24, 28].map((p) => voiceTurn(ctx('drums', p, { drums: 0, bass: 0, chords: 0, melody: 0 })));
-  assert.equal(new Set(tied).size, 4, `turns ${tied}`);
+  const all0 = Object.fromEntries(ROLES.map((r) => [r, 0]));
+  const tied = [16, 20, 24, 28, 32, 36, 40].map((p) => voiceTurn(ctx('drums', p, all0)));
+  assert.equal(new Set(tied).size, ROLES.length, `turns ${tied}`);
 });
 
 test('stability: instruments change only at section starts, one part at a time, two sections apart', () => {

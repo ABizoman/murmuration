@@ -11,7 +11,8 @@
 
 import { ROLES } from '../loops.js';
 
-export const ROLE_PRIORITY = ['chords', 'drums', 'bass', 'melody'];
+// Who gets a device first: the core band, then the extra layers (round 2, step 2).
+export const ROLE_PRIORITY = ['chords', 'drums', 'bass', 'melody', 'pad', 'arp', 'perc'];
 
 function hash(str) {
   let h = 0x811c9dc5;

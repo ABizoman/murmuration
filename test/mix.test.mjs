@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MIX, DRUM_STRIP, mixFor, isWeakDevice, dbToGain, reverbsIn } from '../src/mix.js';
 import { DRUM_FILES } from '../src/voices.js';
-import { createLibrary, ROLES } from '../src/loops.js';
+import { createLibrary, ROLES , kindOf } from '../src/loops.js';
 
 const full = mixFor(false);
 const lite = mixFor(true);
@@ -17,7 +17,7 @@ test('mix: every strip reaches a bus, every bus reaches the master, nothing is o
     for (const send of ['room', 'hall', 'delay']) assert.ok(s[send] == null || (s[send] > 0 && s[send] <= 1), `${name} ${send} ${s[send]}`);
   }
   // one strip per pitched role, plus the three the drums split into
-  for (const role of ROLES.filter((r) => r !== 'drums')) assert.ok(MIX.strips[role], `no strip for ${role}`);
+  for (const role of ROLES.filter((r) => kindOf(r) !== 'drums')) assert.ok(MIX.strips[role], `no strip for ${role}`); // perc goes to the hats
   assert.deepEqual(Object.keys(MIX.strips).filter((n) => MIX.strips[n].bus === 'drums'), ['kick', 'body', 'hats']);
   for (const bus of Object.keys(MIX.buses)) assert.ok(Object.values(MIX.strips).some((s) => s.bus === bus), `${bus} has no strips`);
 });

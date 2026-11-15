@@ -27,6 +27,10 @@ export const MIX = {
     chords: { bus: 'chords', pan: 0, hp: 180, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
     // a gentle top cut (was a +1.5 dB boost): the lead should be clear, not sharp
     melody: { bus: 'melody', pan: 0, hp: 220, hall: 0.16, delay: 0.18, eq: { high: -2, highFrequency: 3000 } },
+    // the extra layers: the pad sits in the hall behind the chords (and pumps with them), the arp
+    // a little to the right with more echo, the perc goes to the hats
+    pad: { bus: 'chords', pan: -0.1, hp: 250, hall: 0.35, eq: { high: -3, highFrequency: 4000 } },
+    arp: { bus: 'melody', pan: 0.25, hp: 300, hall: 0.12, delay: 0.3, eq: { high: -2, highFrequency: 3500 } },
   },
   buses: {
     drums: { comp: { threshold: -14, ratio: 4, attack: 0.01, release: 0.12, knee: 6 } },
@@ -62,6 +66,7 @@ export const DRUM_STRIP = {
   snare: 'body', clap: 'body', rim: 'body', tom1: 'body', tom2: 'body', tom3: 'body',
   hat: 'hats', hihat: 'hats', ohat: 'hats', ride: 'hats', crash: 'hats',
   riser: 'hats', // synthesised noise sweep before a big section (audio.js); shares the hats' sends
+  shaker: 'hats', tamb: 'hats', // the perc part
 };
 
 export const dbToGain = (db) => 10 ** (db / 20);

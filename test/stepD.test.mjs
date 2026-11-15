@@ -20,7 +20,7 @@ const dir = (p) => formDirective(form, p);
 const barMs = 16 * stepMs(structure.bpm);
 
 test('horizons: drums and chords decide 2 bars ahead, the bass 1.5, the melody 1, in that order', () => {
-  assert.deepEqual(COMPOSE_AHEAD, { drums: 2, chords: 2, bass: 1.5, melody: 1 });
+  assert.deepEqual(COMPOSE_AHEAD, { drums: 2, chords: 2, pad: 2, perc: 1.5, bass: 1.5, melody: 1, arp: 0.75 });
   let t = 0;
   const events = [];
   const plans = [];
@@ -37,13 +37,13 @@ test('horizons: drums and chords decide 2 bars ahead, the bass 1.5, the melody 1
   }
   for (let p = 1; p < 7; p++) {
     const order = events.filter((x) => x.phrase === p).map((x) => x.role);
-    assert.deepEqual(order, ['drums', 'chords', 'bass', 'melody'], `phrase ${p}`);
+    assert.deepEqual(order, ['drums', 'chords', 'pad', 'perc', 'bass', 'melody', 'arp'], `phrase ${p}`);
   }
   // one plan per horizon group per phrase, each giving Jev one bar
   const p3 = plans.filter((x) => x.phrase === 3).map((x) => x.roles.join('+'));
-  assert.deepEqual(p3, ['drums+chords', 'bass', 'melody']);
-  for (const p of plans.filter((x) => x.phrase > 1)) assert.ok(Math.abs(p.deadline - barMs) <= 26, `deadline ${p.deadline}`);
-  assert.equal(e.horizonText(), 'drums + chords 2 · bass 1.5 · melody 1 bars ahead');
+  assert.deepEqual(p3, ['drums+chords+pad', 'perc+bass', 'melody', 'arp']);
+  for (const p of plans.filter((x) => x.phrase > 1)) assert.ok(Math.abs(p.deadline - barMs) <= 26, `deadline ${p.deadline}`); // every group gets one bar
+  assert.equal(e.horizonText(), 'drums + chords + pad 2 · perc + bass 1.5 · melody 1 · arp 0.75 bars ahead');
 });
 
 test('four devices: the bass hears the drums and chords for the same phrase, the melody hears all three', () => {

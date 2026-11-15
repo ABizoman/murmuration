@@ -3,6 +3,7 @@
 import { parseChord, anchorFor, degreeToMidi, voiceChord } from './theory.js';
 import { BARS_PER_PHRASE } from './clock.js';
 import { sectionAt } from './form.js';
+import { kindOf } from './loops.js';
 
 // The chord under a bar. A song with sections (structure.sections, structure.form) uses the current
 // section's own progression, counted from the section's start; the coda is the tonic. Pure in
@@ -35,17 +36,18 @@ export function renderPhrase(loop, { structure, phrase, register = 0, prevVoicin
     const lb = (local * BARS_PER_PHRASE + bar) % loop.bars; // 8-bar loops span two phrases
     const chord = chordAt(structure, phrase, bar);
     const events = loop.events.filter((e) => e.bar === lb);
-    if (loop.role === 'chords' && events.length) voicing = voiceChord(chord, loop.voicing || 3, voicing, register);
-    const anchor = loop.role === 'bass' || loop.role === 'melody' ? anchorFor(loop.role, chord, register) : null;
+    const kind = kindOf(loop.role);
+    if (kind === 'chords' && events.length) voicing = voiceChord(chord, loop.voicing || 3, voicing, register, loop.role);
+    const anchor = kind === 'bass' || kind === 'melody' ? anchorFor(loop.role, chord, register) : null;
 
     for (const e of events) {
       const base = { step: bar * 16 + e.step, dur: e.dur, vel: e.vel };
-      if (loop.role === 'drums') notes.push({ ...base, drum: e.drum });
-      else if (loop.role === 'chords') notes.push({ ...base, midis: voicing });
+      if (kind === 'drums') notes.push({ ...base, drum: e.drum });
+      else if (kind === 'chords') notes.push({ ...base, midis: voicing });
       else {
         let midi = degreeToMidi(e.deg, e.oct, chord, anchor) + (e.acc || 0);
         // keep pack lines that wander far from the anchor in a playable range
-        if (fold && loop.role === 'bass') while (midi < 28) midi += 12;
+        if (fold && kind === 'bass') while (midi < 28) midi += 12;
         if (fold) while (midi > 100) midi -= 12;
         notes.push({ ...base, midi });
       }

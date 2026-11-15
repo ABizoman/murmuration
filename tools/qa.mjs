@@ -28,9 +28,9 @@ const SEEDS = opt('seeds', 'durhack,pop1,pop2,pop3,pop4').split(',');
 const PHRASES = Number(opt('phrases', 40));
 const RNG = opt('rng', 'qa');
 const SAVE = opt('save', null);
-// --devices 4 (default): a device per part, gossiping with 60 ms latency, like the demo. --devices 1:
+// --devices 7 (default): a device per part, gossiping with 60 ms latency, like the demo. --devices 1:
 // one engine plays everything. --horizons uniform: every part decides 1 bar ahead (before Phase 6).
-const DEVICES = Number(opt('devices', 4));
+const DEVICES = Number(opt('devices', 7));
 const UNIFORM = opt('horizons', 'staggered') === 'uniform';
 
 const lines = [];
@@ -41,7 +41,7 @@ const pct = (x) => `${Math.round(x * 100)}%`;
 const lpad = (s, n) => String(s).padStart(n);
 
 out(`Murmuration music QA · ${PHRASES} phrases · rng "${RNG}-<seed>" · seeds ${SEEDS.join(', ')}`);
-out(`${DEVICES === 4 ? 'four devices, one part each (60 ms gossip)' : 'one device plays everything'} · horizons ${UNIFORM ? 'uniform (1 bar)' : 'staggered (drums + chords 2, bass 1.5, melody 1 bars)'}`);
+out(`${DEVICES > 1 ? 'a device per part (60 ms gossip)' : 'one device plays everything'} · horizons ${UNIFORM ? 'uniform (1 bar)' : 'staggered (drums + chords 2, bass 1.5, melody 1 bars)'}`);
 out(`(loop/voice changes count only consecutive phrases where the part plays in both)`);
 
 const pooled = Object.fromEntries(ROLES.map((r) => [r, { fit: [], loop: [0, 0], voice: [0, 0], terms: {} }]));

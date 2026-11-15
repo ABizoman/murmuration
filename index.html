@@ -18,6 +18,7 @@
   :root {
     /* part colours, read by main.js and the flock */
     --drums:#FFB547; --bass:#5AC8FA; --chords:#C78BFF; --melody:#7CFFB2;
+    --pad:#8FA8FF; --arp:#FF8FD1; --perc:#FFE27A;
     --bg:#E9E9EB; --tile:#F2F2F3; --tile-2:#EDEDEF; --wheel:#FBFBFB; --ink:#111114; --ink-2:#4A4A52; --muted:#8D8D96; --icon:#B9B9C0;
     --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1);
     --serif:"Instrument Serif", Georgia, serif;
@@ -311,7 +312,7 @@
         <section>
           <h4>Import MIDI pack loops</h4>
           <div class="row">
-            <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option></select></label>
+            <label>Role <select id="mRole"><option>drums</option><option>bass</option><option>chords</option><option>melody</option><option>pad</option><option>arp</option><option>perc</option></select></label>
             <label>Style <input id="mStyle" value="pack" size="7" /></label>
             <label>Density <select id="mDensity"><option>sparse</option><option selected>medium</option><option>busy</option></select></label>
             <label>File key <select id="mKey"></select></label>

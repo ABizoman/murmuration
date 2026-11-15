@@ -10,6 +10,7 @@
 // three samplers (kick / snare and toms / hats) because those three go different ways in the mix.
 
 import { VOICES, voiceById, DRUM_FILES } from './voices.js';
+import { kindOf } from './loops.js';
 import { newMeters, addMeterSample } from './listen.js';
 import { MIX, DRUM_STRIP, PUMP, mixFor, isWeakDevice, dbToGain } from './mix.js';
 
@@ -18,7 +19,7 @@ const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D
 const DRUM_LEN = { kick: 0.6, snare: 0.5, hat: 0.06, ohat: 0.35, tom1: 0.6, tom2: 0.6, tom3: 0.7, crash: 1.2, ride: 0.5 };
 // Measured by soloing each part (?solo=<role>) and reading the loudness meter in "Under the hood".
 // Re-measure after any change to the graph in mix.js; see "How to A/B a change" in the README.
-const ROLE_GAIN = { drums: -14, bass: 7.5, chords: 10.5, melody: 9 };
+const ROLE_GAIN = { drums: -14, bass: 7.5, chords: 10.5, melody: 9, pad: 8.5, arp: 6, perc: 0 };
 
 // Perceptual loudness: velocity 0.5 should sound about half as loud, which is not half the
 // amplitude. Flat velocities were part of why the band sounded like a machine.
@@ -41,8 +42,10 @@ const stripFiles = (strip) => DRUM_FILES.concat('ohat').filter((f) => DRUM_STRIP
 // while its samples are still loading. Level: ROLE_GAIN[role] + PATCH_DB + the voice's `gain`
 // (measured with `npm run measure-levels -- --roles <role> --extra voice=<role>:<id>`), so moving
 // ROLE_GAIN moves a whole part, samples and synths alike. The drum patch keeps its own levels.
-export const PATCH_ROLE = { drums: 'drums', house: 'drums', bass: 'bass', pad: 'chords', keys: 'chords', stab: 'chords', lead: 'melody', pluck: 'melody', riff: 'melody' };
-export const ROLE_PATCH = { drums: 'drums', bass: 'bass', chords: 'pad', melody: 'lead' }; // fallback while loading
+export const PATCH_ROLE = { drums: 'drums', house: 'drums', perc: 'perc', bass: 'bass', pad: 'chords', keys: 'chords', stab: 'chords', lead: 'melody', pluck: 'melody', riff: 'melody' };
+// Kits route each hit to its own strip (mix.js DRUM_STRIP) and set their own levels.
+const KIT_PATCHES = new Set(['drums', 'house', 'perc']);
+export const ROLE_PATCH = { drums: 'drums', bass: 'bass', chords: 'pad', melody: 'lead', pad: 'pad', arp: 'pluck', perc: 'perc' }; // fallback while loading
 const PATCH_DB = { bass: -23, pad: -31, keys: -25, lead: -25.5, pluck: -23.5, stab: -28, riff: -25 };
 // The kits have no crash sample: the crash and the riser are always synthesised, into the hats strip.
 export const FX_DB = { crash: -16, riserFrom: -36, riserTo: -18 };
@@ -200,6 +203,22 @@ PATCHES.riff = (strip, out) => {
   return poly(synth);
 };
 
+// The perc part: a shaker (short noise through a bandpass) and a tambourine (brighter, longer).
+PATCHES.perc = (strip, out, gainDb = 0) => {
+  const shaker = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.004, decay: 0.05, sustain: 0 } })
+    .connect(new Tone.Filter({ type: 'bandpass', frequency: 6000, Q: 1.2 }).connect(strip.hats));
+  shaker.volume.value = -20 + gainDb;
+  const tamb = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.14, sustain: 0 } })
+    .connect(new Tone.Filter(6500, 'highpass').connect(strip.hats));
+  tamb.volume.value = -19 + gainDb;
+  return {
+    play(n, t, d, vel) {
+      if (n.drum === 'tamb') tamb.triggerAttackRelease(0.15, t, vel);
+      else shaker.triggerAttackRelease(0.06, t, vel);
+    },
+  };
+};
+
 // A polyphonic patch plays chords (one trigger per pitch, strummed by `offsets`) or single notes.
 function poly(synth) {
   return {
@@ -281,15 +300,16 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
   const mix = mixFor(isLite);
   const { strip, ducks, fx, hallSends, wideners } = buildMix(mix);
   // Patches are built the first time something plays through them.
+  // One instance per (patch, part): the chords' pad and the pad part's pad are separate synths, each
+  // into its own part's strip at its own level.
   const patches = {};
-  function patch(name) {
-    if (patches[name]) return patches[name];
-    const role = PATCH_ROLE[name];
-    const owner = Object.values(VOICES).flat().find((v) => v.synth === name);
-    // Kits route each drum to its own strip and set their own levels (plus the voice's gain).
-    const kit = PATCH_ROLE[name] === 'drums';
-    const out = kit ? null : new Tone.Gain(dbToGain((ROLE_GAIN[role] ?? 0) + (PATCH_DB[name] ?? -25) + (owner?.gain ?? 0))).connect(strip[role]);
-    return (patches[name] = PATCHES[name](strip, out, owner?.gain ?? 0));
+  function patch(name, role = PATCH_ROLE[name]) {
+    const key = `${name}|${role}`;
+    if (patches[key]) return patches[key];
+    const owner = VOICES[role]?.find((v) => v.synth === name) ?? Object.values(VOICES).flat().find((v) => v.synth === name);
+    const kit = KIT_PATCHES.has(name);
+    const out = kit ? null : new Tone.Gain(dbToGain((ROLE_GAIN[role] ?? 0) + (PATCH_DB[name] ?? -25) + (owner?.gain ?? 0))).connect(strip[role] ?? strip[PATCH_ROLE[name]]);
+    return (patches[key] = PATCHES[name](strip, out, owner?.gain ?? 0));
   }
   const freq = (m) => Tone.Frequency(m, 'midi').toFrequency();
   const noteName = (m) => Tone.Frequency(m, 'midi').toNote();
@@ -423,8 +443,8 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
 
   function playSynth(role, n, t, d, sSec, voiceId) {
     const name = patchFor(voiceId, role);
-    const dur = role === 'drums' ? d : d * 0.95;
-    patch(name).play(n, t, dur, gainOf(n.vel), freq, sSec, () => patch('drums').play(n, t, dur, gainOf(n.vel), freq, sSec));
+    const dur = kindOf(role) === 'drums' ? d : d * 0.95;
+    patch(name, role).play(n, t, dur, gainOf(n.vel), freq, sSec, () => patch('drums', 'drums').play(n, t, dur, gainOf(n.vel), freq, sSec));
   }
 
   function toAudioTime(epochMs) {
@@ -462,12 +482,12 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
         return playSynth(role, n, t, d, sSec, voiceId);
       }
       try {
-        if (role === 'drums') {
+        if (kindOf(role) === 'drums') {
           const drum = drumName(n.drum);
           const part = s.parts?.[DRUM_STRIP[drum]];
           if (!part || !DRUM_NOTE[drum]) return playSynth(role, n, t, d, sSec, 'synth-drums'); // crash, riser, ride: synthesised
           part.triggerAttackRelease(DRUM_NOTE[drum], DRUM_LEN[n.drum] ?? 0.4, t, gainOf(drum === 'ohat' ? n.vel * 0.8 : n.vel));
-        } else if (role === 'chords') {
+        } else if (Array.isArray(n.midis)) {
           const ts = strumTimes(n, t, sSec);
           n.midis.forEach((m, k) => s.triggerAttackRelease(noteName(m), d * 0.98, ts[k], gainOf(n.vel)));
         } else s.triggerAttackRelease(noteName(n.midi), d * 0.98, t, gainOf(n.vel));

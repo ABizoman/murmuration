@@ -63,7 +63,7 @@ test('formDirective: the form leads, the director nudges, never against the plan
   assert.equal(chorus.section, 'chorus');
   assert.equal(chorus.hook, true);
   assert.equal(chorus.energy, 0.9);
-  assert.deepEqual(chorus.plan, { drums: 'full', bass: 'full', chords: 'full', melody: 'full' });
+  assert.deepEqual(chorus.plan, { drums: 'full', bass: 'full', chords: 'full', melody: 'full', pad: 'normal', arp: 'full', perc: 'full' });
   assert.deepEqual(chorus.transitionIn, ['fill', 'crash', 'riser']);
   // director energy nudges by 0.4 x (energy - 0.5)
   assert.ok(Math.abs(formDirective(form, 1, sanitiseDirective({ energy: 1 })).energy - 0.65) < 1e-9);
@@ -176,9 +176,9 @@ test('a run: the hook comes back in every chorus, fills, crashes and risers only
 test('the end: the coda plays, then the engine stops and says so', () => {
   const { parts, events, engine } = simulateBand({ seed: 'durhack#end', rng: 'end', phrases: 18 });
   const coda = parts.filter((x) => x.phrase === 14);
-  assert.equal(coda.length, 4);
-  for (const { part } of coda) {
-    assert.ok(part.notes.length > 0 && part.notes.every((n) => n.step === 0), part.why);
+  assert.equal(coda.length, ROLES.length);
+  for (const { role, part } of coda) {
+    assert.ok((part.notes.length > 0 || role === 'perc') && part.notes.every((n) => n.step === 0), part.why);
     assert.equal(part.why, 'the last chord');
   }
   assert.ok(!parts.some((x) => x.phrase > 14), 'nothing is composed after the coda');

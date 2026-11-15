@@ -7,13 +7,16 @@
 import { REGISTERS } from '../decide/rules.js';
 
 export const LEVEL_NAMES = ['resting', 'sparse', 'medium', 'busy'];
-const ROLES = ['drums', 'bass', 'chords', 'melody'];
+const ROLES = ['drums', 'bass', 'chords', 'melody', 'pad', 'arp', 'perc'];
 
 const ROLE_WORDS = {
-  drums: ['drum', 'drums', 'beat', 'beats', 'kick', 'snare', 'hats', 'hihat', 'percussion', 'groove'],
+  drums: ['drum', 'drums', 'beat', 'beats', 'kick', 'snare', 'hats', 'hihat', 'groove'],
   bass: ['bass', 'bassline', 'low end'],
-  chords: ['chord', 'chords', 'pad', 'pads', 'keys', 'harmony'],
+  chords: ['chord', 'chords', 'keys', 'harmony', 'piano'],
   melody: ['melody', 'lead', 'tune', 'topline', 'top line'],
+  pad: ['pad', 'pads', 'strings', 'atmosphere'],
+  arp: ['arp', 'arpeggio', 'arpeggios', 'sparkle'],
+  perc: ['perc', 'shaker', 'tambourine', 'shakers'],
 };
 
 const has = (t, words) => words.some((w) => t.includes(` ${w} `));

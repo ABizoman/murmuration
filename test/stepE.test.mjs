@@ -73,7 +73,7 @@ test('the demo songs: forms, lengths and instruments as planned', () => {
     assert.ok(f && f.end, `${id} ends`);
     const seconds = ((f.length * 16 + 12) * 60) / s.bpm; // + three bars of the final chord
     assert.ok(seconds > minS && seconds < maxS, `${id} lasts ${seconds.toFixed(0)} s`);
-    for (const r of ROLES) assert.ok(SONGS[id].voices[r].length, `${id} ${r} voices`);
+    for (const r of ['drums', 'bass', 'chords', 'melody']) assert.ok(SONGS[id].voices[r].length, `${id} ${r} voices`);
   }
   // Murmur builds up as the demo story: drums, then bass, then chords, then the melody
   for (const id of ['murmur', 'murmur-pop']) {
@@ -101,7 +101,7 @@ test('murmur-pop on four devices, start to end: sections in order, the right par
     else assert.ok(part.notes.length > 0, `${role} should play in the ${d.section} (phrase ${phrase})`);
     if (part.notes.length && !d.end) assert.equal(part.d.style, `song-murmur-pop-${d.section}`);
   }
-  for (const r of ROLES) {
+  for (const r of Object.keys(SONGS['murmur-pop'].voices)) {
     const voices = new Set(series[r].map((x) => x.part.d.voice));
     assert.deepEqual([...voices], [SONGS['murmur-pop'].voices[r][0]], `${r} keeps its first instrument`);
   }

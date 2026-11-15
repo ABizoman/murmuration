@@ -10,18 +10,19 @@
 import { DEFAULT_DIRECTIVE } from './directive.js';
 import { VOICES, voiceById, DEFAULT_VOICE } from '../voices.js';
 import { familyOf, familyWeight } from '../styles.js';
+import { ROLES, kindOf } from '../loops.js';
 
 export const SECTION_PHRASES = 4;
 export const VOICE_HOLD_SECTIONS = 2; // an instrument is kept at least this many director sections
-const ORDER = ['drums', 'bass', 'chords', 'melody'];
+const ORDER = ROLES;
 const GROOVE_ROLES = new Set(['drums', 'bass']); // keep their style for the whole section
 const GROOVE_ENERGY_JUMP = 0.3; // ...unless the energy moves more than this
 
-export const ENTRY = { chords: 0, drums: 1, bass: 1, melody: 2 }; // song phrase each role enters at
-export const REGISTERS = { drums: [0], bass: [0, 1], chords: [-1, 0, 1], melody: [-1, 0, 1] };
-const CENTRE = { bass: 40, chords: 64, melody: 74 }; // typical mean pitch at register 0
-const REGISTER_PRIOR = { bass: { 0: 1.5, 1: 0.35 }, chords: { '-1': 0.8, 0: 1.5, 1: 0.6 }, melody: { '-1': 0.45, 0: 1.5, 1: 1 } };
-const STYLE_ENERGY = { 'drums/boombap': 0.4, 'drums/four': 0.75, 'bass/roots': 0.35, 'bass/pulse': 0.75, 'bass/offbeat': 0.6, 'chords/pad': 0.3, 'chords/stabs': 0.7, 'melody/riff': 0.55 };
+export const ENTRY = { chords: 0, drums: 1, bass: 1, melody: 2, pad: 1, perc: 2, arp: 3 }; // song phrase each role enters at (no form)
+export const REGISTERS = { drums: [0], bass: [0, 1], chords: [-1, 0, 1], melody: [-1, 0, 1], pad: [0, 1], arp: [0, 1], perc: [0] };
+const CENTRE = { bass: 40, chords: 64, melody: 74, pad: 69, arp: 66 }; // typical mean pitch at register 0
+const REGISTER_PRIOR = { bass: { 0: 1.5, 1: 0.35 }, chords: { '-1': 0.8, 0: 1.5, 1: 0.6 }, melody: { '-1': 0.45, 0: 1.5, 1: 1 }, pad: { 0: 1.5, 1: 0.8 }, arp: { 0: 1.2, 1: 1 } };
+const STYLE_ENERGY = { 'pad/wash': 0.4, 'pad/swell': 0.45, 'arp/arp': 0.6, 'arp/bounce': 0.65, 'perc/shaker': 0.6, 'perc/tamb': 0.55, 'drums/boombap': 0.4, 'drums/four': 0.75, 'bass/roots': 0.35, 'bass/pulse': 0.75, 'bass/offbeat': 0.6, 'chords/pad': 0.3, 'chords/stabs': 0.7, 'melody/riff': 0.55 };
 
 // Who naturally imitates or responds to whom.
 const AFFINITY = {
@@ -48,6 +49,11 @@ export function ruleScores(ctx, library) {
   const reasons = [];
   const others = Object.values(peers).filter(Boolean);
   const active = others.filter((p) => p.level > 0 && p.notes.length);
+
+  // A part this library has nothing for (a new layer in an old song): it rests.
+  if (!library.styles(role).length) {
+    return { level: { 0: 1 }, style: {}, register: { 0: 1 }, interaction: { none: 1 }, voice: { [DEFAULT_VOICE[role]]: 1 }, reasons: [{ text: 'this song has no part for me' }] };
+  }
 
   // ---- 1. How busy --------------------------------------------------------------
   let level;
@@ -129,10 +135,10 @@ export function ruleScores(ctx, library) {
   // A song plays in its own register: 0, or what it asks for per part (register: { melody: 1 }).
   for (const r of song ? [[-1, 0, 1].includes(song.register?.[role]) ? song.register[role] : 0] : REGISTERS[role]) {
     let w = REGISTER_PRIOR[role]?.[r] ?? 1;
-    if (role !== 'drums') {
+    if (kindOf(role) !== 'drums') {
       const centre = CENTRE[role] + 12 * r;
       for (const p of active) {
-        if (p.meanPitch == null || p.role === 'drums') continue;
+        if (p.meanPitch == null || kindOf(p.role) === 'drums') continue;
         const dist = Math.abs(centre - p.meanPitch);
         if (dist < 6) {
           w *= 0.2;

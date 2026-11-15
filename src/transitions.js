@@ -54,7 +54,7 @@ export function applyTransitions(notes, { role, dir, structure, phrase }) {
     if (next.includes('riser')) out.push({ step: LAST_BAR, dur: 16, vel: 0.8, drum: 'riser' });
   }
 
-  if (dir.dropLastBar && (role === 'bass' || role === 'melody')) {
+  if (dir.dropLastBar && ['bass', 'melody', 'arp', 'perc'].includes(role)) {
     out = out.filter((n) => n.step < LAST_BAR).map((n) => (n.step + n.dur > LAST_BAR ? { ...n, dur: LAST_BAR - n.step } : n));
   }
 
@@ -72,6 +72,13 @@ export function endNotes(role, structure) {
     return m;
   };
   if (role === 'drums') return [{ step: 0, dur: 4, vel: 0.9, drum: 'kick' }, { step: 0, dur: 4, vel: 0.85, drum: 'crash' }];
+  if (role === 'perc') return [];
+  if (role === 'arp') return [{ step: 0, dur: 16, vel: 0.5, midi: near(67) }];
+  if (role === 'pad') {
+    const third = structure.mode === 'minor' ? 3 : 4;
+    const r = near(64);
+    return [{ step: 0, dur: 48, vel: 0.5, midis: [r, r + third, r + 7, r + 12] }];
+  }
   if (role === 'bass') return [{ step: 0, dur: 32, vel: 0.85, midi: near(40) }];
   if (role === 'melody') return [{ step: 0, dur: 32, vel: 0.7, midi: near(74) }];
   if (role === 'chords') {

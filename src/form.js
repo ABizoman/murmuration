@@ -15,24 +15,27 @@
 // the form leads, the director nudges.
 
 import { DEFAULT_DIRECTIVE } from './decide/directive.js';
+import { ROLES } from './loops.js';
 
-const plan = (drums, bass, chords, melody) => ({ drums, bass, chords, melody });
+// plan(core band, then the extra layers): the pad comes in with the verse, the arp and the perc
+// build through the pre-chorus and fill the choruses; the breakdown keeps only the pad's air.
+const plan = (drums, bass, chords, melody, pad = 'out', arp = 'out', perc = 'out') => ({ drums, bass, chords, melody, pad, arp, perc });
 
 export const POP_FORM = [
   { name: 'intro', phrases: 1, energy: 0.3, plan: plan('light', 'out', 'normal', 'out'), hook: false, transitionIn: [] },
-  { name: 'verse', phrases: 2, energy: 0.45, plan: plan('normal', 'normal', 'normal', 'normal'), hook: false, transitionIn: [] },
-  { name: 'pre', phrases: 1, energy: 0.65, plan: plan('normal', 'normal', 'normal', 'light'), hook: false, transitionIn: ['fill'] },
-  { name: 'chorus', phrases: 2, energy: 0.9, plan: plan('full', 'full', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
-  { name: 'verse2', phrases: 2, energy: 0.5, plan: plan('normal', 'normal', 'normal', 'normal'), hook: false, transitionIn: ['fill', 'crash'] },
-  { name: 'chorus', phrases: 2, energy: 0.95, plan: plan('full', 'full', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
-  { name: 'breakdown', phrases: 1, energy: 0.35, plan: plan('out', 'out', 'normal', 'light'), hook: false, transitionIn: [], dropLastBar: true },
-  { name: 'finalChorus', phrases: 2, energy: 1, plan: plan('full', 'full', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
-  { name: 'outro', phrases: 1, energy: 0.3, plan: plan('light', 'out', 'light', 'out'), hook: false, transitionIn: [] },
+  { name: 'verse', phrases: 2, energy: 0.45, plan: plan('normal', 'normal', 'normal', 'normal', 'light'), hook: false, transitionIn: [] },
+  { name: 'pre', phrases: 1, energy: 0.65, plan: plan('normal', 'normal', 'normal', 'light', 'normal', 'light', 'light'), hook: false, transitionIn: ['fill'] },
+  { name: 'chorus', phrases: 2, energy: 0.9, plan: plan('full', 'full', 'full', 'full', 'normal', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
+  { name: 'verse2', phrases: 2, energy: 0.5, plan: plan('normal', 'normal', 'normal', 'normal', 'normal', 'out', 'light'), hook: false, transitionIn: ['fill', 'crash'] },
+  { name: 'chorus', phrases: 2, energy: 0.95, plan: plan('full', 'full', 'full', 'full', 'normal', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
+  { name: 'breakdown', phrases: 1, energy: 0.35, plan: plan('out', 'out', 'normal', 'light', 'normal'), hook: false, transitionIn: [], dropLastBar: true },
+  { name: 'finalChorus', phrases: 2, energy: 1, plan: plan('full', 'full', 'full', 'full', 'normal', 'full', 'full'), hook: true, transitionIn: ['fill', 'crash', 'riser'] },
+  { name: 'outro', phrases: 1, energy: 0.3, plan: plan('light', 'out', 'light', 'out', 'light'), hook: false, transitionIn: [] },
 ];
 const LOOP_FROM = 'verse2'; // where the form goes back to after the outro
 
 // The one-phrase coda when the song ends: every part plays one last note on the downbeat.
-export const END_SECTION = { name: 'end', phrases: 1, energy: 0.3, plan: plan('normal', 'normal', 'normal', 'normal'), hook: false, transitionIn: ['crash'], end: true };
+export const END_SECTION = { name: 'end', phrases: 1, energy: 0.3, plan: plan('normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'out'), hook: false, transitionIn: ['crash'], end: true };
 
 // A song's own form (songs/format.js `sections` + `form`), as the same kind of object as the pop
 // form. Each entry of the song's form is one section here, so the transitions can depend on what
@@ -51,7 +54,7 @@ export function songForm(song) {
     const d = defs[name];
     const prev = i > 0 ? defs[song.form[i - 1][0]] : null;
     const plan = {};
-    for (const r of ['drums', 'bass', 'chords', 'melody']) plan[r] = d.plan?.[r] ?? (d.roles.includes(r) ? (d.hook ? 'full' : 'normal') : 'out');
+    for (const r of ROLES) plan[r] = d.plan?.[r] ?? (d.roles.includes(r) ? (d.hook ? 'full' : 'normal') : 'out');
     let transitionIn = d.transitionIn;
     if (!transitionIn) {
       if (i === 0) transitionIn = [];

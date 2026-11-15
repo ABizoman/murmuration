@@ -14,7 +14,14 @@
 //
 // Imported MIDI pack loops are converted into this same shape (midi-import.js).
 
-export const ROLES = ['drums', 'bass', 'chords', 'melody'];
+// The parts. The first four are the core band; pad, arp and perc are the extra layers a bigger
+// swarm adds (round 2, step 2), each claimable by its own device. Every part is one of four
+// *kinds*, which decides how its loops are written and rendered: pad plays like chords (held
+// voicings), arp like a melody (single notes), perc like drums (hits).
+export const ROLES = ['drums', 'bass', 'chords', 'melody', 'pad', 'arp', 'perc'];
+export const CORE_ROLES = ['drums', 'bass', 'chords', 'melody'];
+export const ROLE_KIND = { drums: 'drums', bass: 'bass', chords: 'chords', melody: 'melody', pad: 'chords', arp: 'melody', perc: 'drums' };
+export const kindOf = (role) => ROLE_KIND[role] ?? role;
 export const DENSITIES = ['sparse', 'medium', 'busy'];
 
 // [bar, step, dur, deg, vel]
@@ -70,6 +77,40 @@ add('chords', 'pad', 'busy', 1, R([[0, 0, 6, 0.6], [0, 6, 4, 0.45], [0, 10, 6, 0
 add('chords', 'stabs', 'sparse', 1, R([[0, 0, 3, 0.75]]), { voicing: 3 });
 add('chords', 'stabs', 'medium', 1, R([[0, 0, 3, 0.8], [0, 6, 2, 0.6], [0, 10, 3, 0.7]]), { voicing: 3 });
 add('chords', 'stabs', 'busy', 1, R([[0, 0, 2, 0.8], [0, 3, 2, 0.55], [0, 6, 2, 0.7], [0, 10, 2, 0.6], [0, 14, 2, 0.5]]), { voicing: 3 });
+
+// --- Pad (held chords under everything) -------------------------------------
+// One chord per bar at most: a held note must never ring on into the next chord.
+add('pad', 'wash', 'sparse', 1, R([[0, 0, 16, 0.42]]), { voicing: 3, energy: 0.3 });
+add('pad', 'wash', 'medium', 1, R([[0, 0, 16, 0.5]]), { voicing: 4, energy: 0.45 });
+add('pad', 'wash', 'busy', 1, R([[0, 0, 8, 0.55], [0, 8, 8, 0.45]]), { voicing: 4, energy: 0.6 });
+add('pad', 'swell', 'sparse', 1, R([[0, 2, 14, 0.4]]), { voicing: 3, energy: 0.3 });
+add('pad', 'swell', 'medium', 1, R([[0, 2, 14, 0.45]]), { voicing: 4, energy: 0.4 });
+add('pad', 'swell', 'busy', 1, R([[0, 0, 6, 0.5], [0, 6, 10, 0.4]]), { voicing: 4, energy: 0.55 });
+
+// --- Arp (quick chord notes, up and down) -------------------------------------
+// [step, degree] per bar; 0 = root, 2 = third, 4 = fifth, 7 = octave
+const ARPS = {
+  up8: [[0, 0], [2, 2], [4, 4], [6, 7], [8, 0], [10, 2], [12, 4], [14, 7]],
+  updown8: [[0, 0], [2, 2], [4, 4], [6, 7], [8, 4], [10, 2], [12, 0], [14, 2]],
+  up16: [...Array(16).keys()].map((s) => [s, [0, 2, 4, 7][s % 4]]),
+  bounce16: [...Array(16).keys()].map((s) => [s, [0, 7, 4, 7, 2, 7, 4, 7][s % 8]]),
+  sparse: [[0, 0], [3, 4], [6, 7], [10, 4], [12, 2]],
+};
+const arp = (name, vel = 0.6) => P(ARPS[name].map(([step, deg]) => [0, step, step % 2 ? 1 : 2, deg, step % 4 === 0 ? vel + 0.1 : vel]));
+add('arp', 'arp', 'sparse', 1, arp('sparse', 0.55), { energy: 0.4 });
+add('arp', 'arp', 'medium', 1, arp('up8'), { energy: 0.55 });
+add('arp', 'arp', 'busy', 1, arp('up16', 0.5), { energy: 0.75 });
+add('arp', 'bounce', 'sparse', 1, P([[0, 0, 2, 0, 0.55], [0, 6, 2, 7, 0.5], [0, 12, 2, 4, 0.5]]), { energy: 0.4 });
+add('arp', 'bounce', 'medium', 1, arp('updown8'), { energy: 0.55 });
+add('arp', 'bounce', 'busy', 1, arp('bounce16', 0.5), { energy: 0.8 });
+
+// --- Perc (shaker and tambourine over the drums) ------------------------------
+add('perc', 'shaker', 'sparse', 1, D({ shaker: [2, 6, 10, 14] }), { energy: 0.4 });
+add('perc', 'shaker', 'medium', 1, D({ shaker: eighths }, { soft: [] }), { energy: 0.55 });
+add('perc', 'shaker', 'busy', 1, D({ shaker: all16, tamb: [4, 12] }), { energy: 0.8 });
+add('perc', 'tamb', 'sparse', 1, D({ tamb: [4, 12] }), { energy: 0.45 });
+add('perc', 'tamb', 'medium', 1, D({ tamb: [4, 12], shaker: [2, 6, 10, 14] }), { energy: 0.6 });
+add('perc', 'tamb', 'busy', 1, D({ tamb: [2, 4, 6, 10, 12, 14], shaker: eighths }), { energy: 0.8 });
 
 // --- Melody: riffs (dance). Chord notes only (root, third, fifth, octave), repeated over the
 // chords: a small range and a lot of repetition, like a dance-floor hook. Generated (below) from a

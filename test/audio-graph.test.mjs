@@ -144,7 +144,7 @@ test('lite graph: built without the hall, and it can drop to lite while playing'
   t.after(() => audio.dispose());
   const hall = nodes.find((n) => n.kind === 'Reverb' && n.opts.decay === 2.2);
   const sends = nodes.filter((n) => n.kind === 'Gain' && n.outs.includes(hall));
-  assert.equal(sends.length, 2, 'the chords and the melody send to the hall');
+  assert.equal(sends.length, 4, 'the chords, the melody, the pad and the arp send to the hall');
   assert.equal(audio.setLite(), true);
   assert.equal(audio.isLite(), true);
   for (const g of sends) assert.ok(g.gain.events.some((e) => e.op === 'rampTo' && e.v === 0), 'hall send faded out');

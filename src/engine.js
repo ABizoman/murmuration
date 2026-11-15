@@ -25,9 +25,11 @@ import { DEFAULT_DIRECTIVE } from './decide/directive.js';
 import { HookBook, HOOK_ROLES } from './hooks.js';
 import { candidateKey } from './decide/select.js';
 
-const ORDER = ['drums', 'bass', 'chords', 'melody']; // later agents see what earlier ones just decided
+// Later agents see what earlier ones just decided (on one device, in the same tick).
+const ORDER = ['drums', 'perc', 'bass', 'chords', 'pad', 'melody', 'arp'];
 const KEEP_PHRASES = 5;
-export const COMPOSE_AHEAD = { drums: 2, chords: 2, bass: 1.5, melody: 1 }; // bars
+// The arp decides last, after the melody, so on its own phone it still hears the melody's phrase.
+export const COMPOSE_AHEAD = { drums: 2, chords: 2, pad: 2, perc: 1.5, bass: 1.5, melody: 1, arp: 0.75 }; // bars
 const CANDIDATE_LEAD = 0.5; // bars between preparing the candidates and choosing one
 const CANDIDATE_MIN_AHEAD = 1.5; // only roles composing at least this far ahead ask Jev to rank
 
