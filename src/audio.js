@@ -12,7 +12,7 @@
 import { VOICES, voiceById, DRUM_FILES } from './voices.js';
 import { kindOf } from './loops.js';
 import { newMeters, addMeterSample } from './listen.js';
-import { MIX, DRUM_STRIP, PUMP, SWEEP, sweepHz, mixFor, isWeakDevice, dbToGain } from './mix.js';
+import { MIX, DRUM_STRIP, PUMP, SWEEP, sweepHz, eqBands, mixFor, isWeakDevice, dbToGain } from './mix.js';
 
 const Tone = window.Tone;
 const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D3', tom2: 'B2', tom3: 'G2' };
@@ -259,9 +259,9 @@ export const patchFor = (voiceId, role) => {
 // Returns the strip inputs (what instruments connect to) plus the handles the rest of the file
 // needs: the duck gains, and what the lite switch has to silence.
 function buildMix(mix) {
-  const master = new Tone.EQ3(mix.master.eq);
+  const master = new Tone.Gain(1);
   const limiter = new Tone.Limiter(mix.master.limiter).toDestination(); // the UI taps the destination
-  master.chain(new Tone.Compressor(mix.master.glue), limiter);
+  master.chain(...eqBands(mix.master.eq).map((b) => new Tone.Filter(b)), new Tone.Compressor(mix.master.glue), limiter);
 
   const room = mix.fx.room ? new Tone.Reverb({ ...mix.fx.room, wet: 1 }).connect(master) : null;
   const hall = mix.fx.hall ? new Tone.Reverb({ ...mix.fx.hall, wet: 1 }).connect(master) : null;
@@ -292,7 +292,7 @@ function buildMix(mix) {
     const chain = [];
     if (spec.hp) chain.push(new Tone.Filter(spec.hp, 'highpass'));
     if (spec.sweep) chain.push((sweeps[name] = new Tone.Filter({ type: 'lowpass', frequency: SWEEP.open, Q: SWEEP.q })));
-    if (spec.eq) chain.push(new Tone.EQ3({ low: 0, mid: 0, high: 0, ...spec.eq }));
+    for (const b of eqBands(spec.eq)) chain.push(new Tone.Filter(b));
     if (spec.widen != null) {
       const w = new Tone.StereoWidener(spec.widen);
       wideners.push(w);

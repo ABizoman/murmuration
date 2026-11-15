@@ -239,7 +239,9 @@ export class Engine {
 
     // Notes reach Web Audio at least audioAheadMs before they sound, and 100 ms more than the
     // device's output latency (bigger audio buffers mean a later speaker; see audio.js).
-    const ahead = Math.max(this.audioAheadMs, (this.audio.latencyMs?.() || 0) + 100);
+    // minAheadMs: main.js asks for more while the page is in the background, where the browser
+    // and Windows slow the page down and a late tick would otherwise lose notes.
+    const ahead = Math.max(this.audioAheadMs, (this.audio.latencyMs?.() || 0) + 100, this.audio.minAheadMs?.() || 0);
     for (const p of [cur, next]) {
       const entry = this.phrases.get(p);
       if (!entry) continue;

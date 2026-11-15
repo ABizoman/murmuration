@@ -26,9 +26,9 @@ test('graph: a kick runs through the drum bus compressor, the glue and the limit
   t.after(() => audio.dispose());
   const [hit] = played(audio, 'drums', note({ drum: 'kick' }));
   const paths = routes(hit.node);
-  assert.ok(paths.some((p) => /^MembraneSynth -> Panner\(0\) -> Gain\(1\) -> Compressor\(r4\) -> EQ3\(mid 0, high 0\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination$/.test(p)),
+  assert.ok(paths.some((p) => /^MembraneSynth -> Panner\(0\) -> Gain\(1\) -> Compressor\(r4\) -> Gain\(1\) -> Filter\(100 lowshelf\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination$/.test(p)),
     `kick routes:\n${paths.join('\n')}`);
-  assert.ok(!paths.some((p) => p.includes('Filter')), 'the kick keeps its bottom end');
+  assert.ok(!paths.some((p) => /Filter\(\d+ (highpass|lowpass)\)/.test(p)), 'the kick keeps its bottom end (only the master low shelf)');
   assert.ok(paths.some((p) => p.includes('Reverb(0.9)')), 'a little room');
   assert.ok(!paths.some((p) => p.includes('Reverb(2.2)')), 'but never the hall');
 });
@@ -51,7 +51,7 @@ test('graph: the bass is highpassed, cut in the mud, then ducked BEFORE its comp
   t.after(() => audio.dispose());
   const paths = routes(played(audio, 'bass', note({ midi: 40 }))[0].node);
   // Two gains in a row = the bus input and the duck gain; the compressor must come after both.
-  assert.ok(paths.some((p) => /Filter\(35 highpass\) -> EQ3\(mid -2, high 0\) -> Panner\(0\) -> Gain\(1\) -> Gain\(1\) -> Compressor\(r3\) -> EQ3\(mid 0, high 0\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination/.test(p)),
+  assert.ok(paths.some((p) => /Filter\(35 highpass\) -> Filter\(274 peaking\) -> Panner\(0\) -> Gain\(1\) -> Gain\(1\) -> Compressor\(r3\) -> Gain\(1\) -> Filter\(100 lowshelf\) -> Compressor\(r2\) -> Limiter\(-1\) -> destination/.test(p)),
     `bass routes:\n${paths.join('\n')}`);
   assert.ok(!paths.some((p) => p.includes('Reverb')), 'no reverb on the bass');
 });
@@ -64,9 +64,9 @@ test('graph: chords and melody get the hall, only the melody gets the delay', as
   assert.ok(chords.some((p) => p.includes('Reverb(2.2)')));
   assert.ok(!chords.some((p) => p.includes('PingPongDelay')));
   const melody = routes(played(audio, 'melody', note({ midi: 72 }))[0].node);
-  assert.ok(melody.every((p) => p.includes('Filter(220 highpass)') && p.includes('EQ3(mid 0, high -2)')));
+  assert.ok(melody.every((p) => p.includes('Filter(220 highpass)') && p.includes('Filter(3000 highshelf)')));
   assert.ok(melody.some((p) => p.includes('Reverb(2.2)')));
-  assert.ok(melody.some((p) => /PingPongDelay -> Filter\(300 highpass\) -> EQ3/.test(p)), 'the delay comes back through a highpass');
+  assert.ok(melody.some((p) => /PingPongDelay -> Filter\(300 highpass\) -> Gain\(1\) -> Filter\(100 lowshelf\)/.test(p)), 'the delay comes back through a highpass');
 });
 
 test('ducking: every kick dips the bass and chord buses and lets them back up over 120 ms', async (t) => {
@@ -107,7 +107,7 @@ test('kits: three samplers per kit, one per route, and every drum sample is stil
   assert.equal(sent('tom1'), sent('snare'), 'toms go with the snare');
   assert.equal(sent('ohat'), sent('hat'), 'the open hat goes with the hats');
   assert.ok(routes(sent('hat')).every((p) => p.includes('Filter(300 highpass)')));
-  assert.ok(routes(sent('kick')).every((p) => !p.includes('Filter')));
+  assert.ok(routes(sent('kick')).every((p) => !/Filter\(\d+ (highpass|lowpass)\)/.test(p)));
   // the kits have no crash sample: it is synthesised into the hats strip, whatever kit is playing
   const crash = played(audio, 'drums', note({ drum: 'crash' }), 'kit-acoustic');
   assert.equal(crash.length, 1);

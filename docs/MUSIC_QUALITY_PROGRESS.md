@@ -848,3 +848,10 @@ reverb and delay found no NaN/runaway values, so it was load, not a blown-up fil
   schedules past the output latency, a suspended context is resumed, glitches (where reported)
   switch to the lite mix.
 - Needs ears: pad and arp a touch less "thick"? Levels compensated by calculation, not measured.
+- Round 2 of the fix, measured on the actual laptop (8 cores, Windows; offline Tone renders run
+  ~2x slower per sound than the cloud test machine): the mix itself was a big fixed cost: six
+  `Tone.EQ3` (11% of real time), the hall reverb (5%), room (3%). The strip EQs are now one
+  biquad per moved band (`mix.js` `eqBands`, same settings); a device sounding 5+ parts takes the
+  lite mix (no hall); the dance style prefers the sampled electric piano over the FM keys (21% on
+  its own). Background: the tick comes from a Web Worker (not throttled) and notes are queued
+  300 ms ahead, 1.2 s while the page is hidden.

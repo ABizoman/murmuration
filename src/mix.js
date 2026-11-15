@@ -1,12 +1,12 @@
 // The mix, as data (Phase 2 of docs/MUSIC_QUALITY_PLAN.md). audio.js builds the Tone.js graph
 // straight from here, so the whole signal flow can be read -- and tested -- in one place.
 //
-//   per part:  sampler/synth -> strip (highpass + sweep lowpass + EQ3 + pan; a widener if a strip asks) -> bus  (+ sends)
+//   per part:  sampler/synth -> strip (highpass + sweep lowpass + EQ biquads + pan; a widener if a strip asks) -> bus  (+ sends)
 //   drums bus  -> Compressor -> master            (kick, snare/toms and hats have their own strips,
 //   bass bus   -> duck -> Compressor -> master     so the hats can be filtered and panned and the
 //   chords bus -> duck -> master                   snare can have more room than the kick)
 //   melody bus -> master
-//   master:    EQ3 -> glue Compressor -> Limiter -> Tone.getDestination()
+//   master:    EQ (a low shelf) -> glue Compressor -> Limiter -> Tone.getDestination()
 //   sends:     ROOM (short) and HALL (long) reverbs, DELAY -> highpass -> master
 //
 // Ducking is scheduled by hand at kick time (see audio.js): we know when every kick plays, so the
@@ -78,6 +78,24 @@ export const DRUM_STRIP = {
 };
 
 export const dbToGain = (db) => 10 ** (db / 20);
+
+// The EQ as plain biquads: one per band that is actually moved. (Tone.EQ3 is a full 3-way
+// crossover -- several filters and gains per strip, ~2% of a laptop core each: with six of them the
+// mix alone cost 11%.) Same settings as Tone.EQ3: low/mid/high in dB, the low band below
+// lowFrequency (default 400 Hz), the high band above highFrequency (default 2500 Hz), the mid a
+// peak at their geometric centre, as wide as the band between them.
+export function eqBands(eq = {}) {
+  const lowF = eq.lowFrequency ?? 400;
+  const highF = eq.highFrequency ?? 2500;
+  const out = [];
+  if (eq.low) out.push({ type: 'lowshelf', frequency: lowF, gain: eq.low });
+  if (eq.mid) {
+    const c = Math.sqrt(lowF * highF);
+    out.push({ type: 'peaking', frequency: Math.round(c), Q: Math.round((c / (highF - lowF)) * 100) / 100, gain: eq.mid });
+  }
+  if (eq.high) out.push({ type: 'highshelf', frequency: highF, gain: eq.high });
+  return out;
+}
 
 // A phone with four cores or fewer gets the lite graph. An unknown core count is treated as fine:
 // better to sound good and let the dropped-frame watchdog in main.js downgrade if it has to.

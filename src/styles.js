@@ -67,7 +67,9 @@ STYLE_FAMILIES.dance = {
     perc: { 'perc-shaker': 3 },
     drums: { 'kit-house': 4, 'kit-linn': 1, 'kit-8': 1 },
     bass: { 'synth-bass': 3, 'bass-electric': 0.6 },
-    chords: { 'synth-stab': 3, 'synth-pad': 2.5, 'keys-epiano': 1.5, 'synth-keys': 1.5 },
+    // the sampled electric piano over the FM one: the FM synth was the most expensive sound in
+    // the band (a fifth of a laptop core on its own)
+    chords: { 'synth-stab': 3, 'synth-pad': 2.5, 'keys-epiano': 2.5, 'synth-keys': 0.5 },
     melody: { 'synth-riff': 3.5, 'synth-pluck': 2, 'synth-lead': 1.5, 'melody-epiano': 1 },
   },
   continuity: { melody: [0.6, 1] }, // fit.js: a riff may repeat itself

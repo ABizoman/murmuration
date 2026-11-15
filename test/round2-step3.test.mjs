@@ -184,3 +184,11 @@ test('server: the QR code points at the Wi-Fi address, not a virtual adapter', a
   assert.equal(ranked[ranked.length - 1].address, '169.254.10.3');
   assert.equal(rankAddresses({ en0: [{ family: 4, address: '192.168.1.20', internal: false }] })[0].address, '192.168.1.20', 'macOS, older Node');
 });
+
+test('mix: the EQ is one biquad per band that moves, matching the old EQ3 settings', async () => {
+  const { eqBands, MIX } = await import('../src/mix.js');
+  assert.deepEqual(eqBands({}), []);
+  assert.deepEqual(eqBands(MIX.strips.bass.eq), [{ type: 'peaking', frequency: 274, Q: 0.78, gain: -2 }]);
+  assert.deepEqual(eqBands(MIX.strips.melody.eq), [{ type: 'highshelf', frequency: 3000, gain: -2 }]);
+  assert.deepEqual(eqBands(MIX.master.eq), [{ type: 'lowshelf', frequency: 100, gain: 1 }]);
+});

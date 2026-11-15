@@ -78,6 +78,28 @@ for (const pair of (params.get('voice') || '').split(',').filter(Boolean)) {
 }
 let realAudio = null;
 let tickTimer = null;
+// A device sounding most of the band by itself (alone, or covering for missing phones) takes the
+// lite mix: no hall reverb, the biggest fixed cost. Harmless for the demo laptop, which covers every
+// part at first but ends up playing only the drums. ?lite=0 keeps the full mix regardless.
+const BUSY_PARTS = 5;
+function liteIfBusy() {
+  if (LITE === false || !realAudio || engine.myRoles.size < BUSY_PARTS) return;
+  if (realAudio.setLite()) log(`sounding ${engine.myRoles.size} parts on this device: <b>lite mix</b> (no hall reverb), so it doesn't crackle`);
+}
+// The engine's tick comes from a Web Worker: a page in the background has its own timers slowed
+// (to once a second, in some browsers), a worker's are not. Falls back to setInterval.
+function startTicker(fn, ms) {
+  try {
+    const src = 'let t; onmessage = (e) => { clearInterval(t); if (e.data > 0) t = setInterval(() => postMessage(0), e.data); };';
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = () => fn();
+    w.postMessage(ms);
+    return { stop: () => { w.postMessage(0); w.terminate(); } };
+  } catch {
+    const t = setInterval(fn, ms);
+    return { stop: () => clearInterval(t) };
+  }
+}
 // The form (improvising: the upbeat-pop form; songs: none until step E) and the shared hooks.
 let form = null;
 let formSeed = null; // the seed the hooks belong to
@@ -98,6 +120,7 @@ const swarm = new Swarm({
       syncDoubling();
       if (gained.length && engine.myRoles.size > gained.length) log(`now also sounding <b>${gained.join(', ')}</b>`);
       if (gained.length) preloadVoices();
+      liteIfBusy();
       renderAgents();
     },
     message: (body, origin) => {
@@ -184,6 +207,9 @@ const engine = new Engine({
     play: (role, n, when, dur, voice, sMs) =>
       (SOLO && role !== SOLO ? null : realAudio?.play(role, n, when - swarm.clock.offset, dur, voice, sMs)),
     latencyMs: () => realAudio?.latencyMs?.() ?? 0,
+    // Notes go to Web Audio 300 ms ahead, 1.2 s while the page is hidden (another window in front):
+    // a throttled page then still has every note queued in time.
+    minAheadMs: () => (document.hidden ? 1200 : 300),
   },
   onEvent,
   onPlan: (phrase, ctxs, deadlineMs) => {
@@ -262,9 +288,9 @@ function playSong(song) {
   jev.library = lib;
   engine.start(structure, song.startMs);
   syncDoubling();
-  clearInterval(tickTimer);
+  tickTimer?.stop();
   lastTick = 0;
-  tickTimer = setInterval(tick, 25);
+  tickTimer = startTicker(tick, 25);
 }
 
 // A device that cannot keep up drops to the lite mix (one reverb, no widener) rather than losing
@@ -285,7 +311,7 @@ function tick() {
 function leaveSong(why = 'left the song (still connected to the swarm)') {
   swarm.leave();
   engine.stop();
-  clearInterval(tickTimer);
+  tickTimer?.stop();
   log(why);
   updateButton();
 }
@@ -293,6 +319,7 @@ function leaveSong(why = 'left the song (still connected to the swarm)') {
 $('start').addEventListener('click', async () => {
   if (swarm.playing) return leaveSong();
   if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE, latencyHint: LATENCY }); // needs this click
+  liteIfBusy();
   try { await navigator.wakeLock?.request('screen'); } catch {}
   if (swarm.song) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
