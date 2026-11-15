@@ -48,6 +48,7 @@
 <header>
   <h1>Murmuration</h1>
   <button id="start" class="primary">Start a song</button>
+  <button id="record" type="button">Record 60 s</button>
   <label>Seed <input id="seed" value="durhack" size="9" /></label>
   <span id="structure"></span>
   <span id="samples" style="color:var(--dim);font-size:13px"></span>
@@ -72,6 +73,11 @@
   <section class="panel">
     <h2>Now playing (top) · next phrase (bottom) · bright = this device, dim = other devices</h2>
     <canvas id="grid" height="380"></canvas>
+  </section>
+
+  <section class="panel">
+    <h2>Meters</h2>
+    <div id="meters" style="font:12px ui-monospace, monospace; color:var(--dim)"></div>
   </section>
 
   <section class="panel">

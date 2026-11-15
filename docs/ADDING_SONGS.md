@@ -32,6 +32,7 @@ export default {
   mode: 'major',                    // major or minor
   bpm: 108,
   progression: ['I', 'V', 'I', 'V', 'I', 'V', 'I', 'I'],   // one chord per bar, 4 or 8 chords
+  swing: 0,                         // 0 to 0.3: how late the odd 16ths sit (optional, default 0)
   build: ['melody', 'chords', 'bass', 'drums'],            // who tends to come in first (optional)
   voices: {                                                 // instruments each part may use (optional)
     melody: ['trumpet', 'horn-french', 'voice-oohs'],
@@ -53,6 +54,14 @@ Only plain triads: write `V` for a V7, `ii` for a iim7. Melody notes outside the
 
 The chords matter: the melody and bass are stored relative to them, and the chords part plays them.
 If a bar has two chords, pick the one that lasts longer (or double the tempo so each chord gets a bar).
+
+### Swing (`swing`)
+How far the odd 16th notes sit behind the grid, as a fraction of a 16th: `0` is dead straight (the
+default, and what every song had before), `0.04` is a light pop lilt, `0.2` is a shuffle. It is part
+of the shared structure, so every device swings by the same amount. Improvised seeds pick 0 to 0.06
+for themselves. On top of this, each part is humanised at compose time (`src/feel.js`): a laid-back
+snare, strummed piano and guitar chords, and velocities that follow the bar — baked into the notes,
+so a phone that doubles or takes over a part plays it exactly the same way.
 
 ### Melody and bass
 Notes with their length in 16th notes, bars separated by `|`:

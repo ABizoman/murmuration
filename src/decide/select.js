@@ -2,10 +2,21 @@
 // multiplied by Jev's probabilities (when they arrived in time), then one option is sampled.
 // Sampling rather than taking the top option keeps the music from looping, and the probabilities
 // are kept so the screen can show how sure the agent was.
+//
+// Phase 3: instead of playing that one sample, the agent draws several candidate decisions from the
+// same distributions (candidateDecisions), renders them, scores them against the band (decide/fit.js)
+// and picks one with pickCandidate: likely *and* fitting. The maths lives here so it can be tested
+// without an agent.
 
 export const QUESTIONS = ['level', 'style', 'register', 'interaction', 'voice'];
+// The instrument is decided once (it only changes at section starts), so it is not searched over.
+export const CANDIDATE_QUESTIONS = ['level', 'style', 'register', 'interaction'];
 const SHARPEN = 1.4; // >1 makes the likely options more likely
 const JEV_FLOOR = 0.03;
+export const LAMBDA = 6; // how much the fit counts against the rules' and Jev's opinion
+export const TEMPERATURE = 0.35; // softmax temperature: variety, but a strong preference for fit
+export const CONTINUITY_BONUS = 0.3; // for carrying on with the same groove, while it is still new
+const PRIOR_FLOOR = 1e-6;
 
 export function normalise(weights) {
   const total = Object.values(weights).reduce((a, b) => a + b, 0);
@@ -34,6 +45,70 @@ export function sample(probs, random) {
     if ((r -= p) <= 0) return k;
   }
   return lastKey;
+}
+
+const cast = (q, v) => (q === 'level' || q === 'register' ? Number(v) : String(v));
+const likeliest = (probs) => Object.entries(probs).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+// Draw up to k distinct candidate decisions from the blended distributions. Always included: the
+// most likely option for every question, and (when there is something to carry on from) last
+// phrase's level, style and register with its loop preferred. Pins are forced in every candidate.
+export function candidateDecisions(dist, base, { pins = null, last = null, prefer = null, k = 6, random = Math.random, tries = 10 } = {}) {
+  const out = [];
+  const seen = new Set();
+  const keyOf = (d) => CANDIDATE_QUESTIONS.map((q) => d[q]).join('|');
+  const pin = (q, v) => (pins && pins[q] != null && String(pins[q]) in (dist[q] || {}) ? cast(q, pins[q]) : v);
+  // Every candidate prefers the loop we are already playing: library.find() keeps it most of the
+  // time, so a candidate changes the *decision* without also swapping pack variant every phrase.
+  const add = (d, kind) => {
+    const key = keyOf(d);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    out.push({ d, kind, prefer });
+    return true;
+  };
+
+  const top = { ...base };
+  for (const q of CANDIDATE_QUESTIONS) if (dist[q]) top[q] = pin(q, cast(q, likeliest(dist[q])));
+  add(top, 'top');
+
+  if (last && last.level > 0) {
+    const cont = { ...base };
+    for (const q of ['level', 'style', 'register']) {
+      if (dist[q] && String(last[q]) in dist[q]) cont[q] = pin(q, cast(q, last[q]));
+    }
+    add(cont, 'continuity');
+  }
+
+  for (let t = 0; out.length < k && t < k + tries; t++) {
+    const d = { ...base };
+    for (const q of CANDIDATE_QUESTIONS) if (dist[q]) d[q] = pin(q, cast(q, sample(dist[q], random)));
+    add(d, 'sampled');
+  }
+  return out;
+}
+
+// How likely the rules and Jev thought this combination was.
+export function candidatePrior(d, dist) {
+  let p = 1;
+  for (const q of CANDIDATE_QUESTIONS) if (dist[q]) p *= dist[q][String(d[q])] ?? PRIOR_FLOOR;
+  return Math.max(p, PRIOR_FLOOR);
+}
+
+// logit = log(prior) + lambda * fit (+ a bonus), then softmax at a low temperature.
+// candidates: [{ d, fit: { total }, bonus? }]. Returns the index chosen and the probabilities.
+export function pickCandidate(candidates, { dist, random = Math.random, lambda = LAMBDA, temperature = TEMPERATURE } = {}) {
+  const logits = candidates.map((c) => Math.log(candidatePrior(c.d, dist)) + lambda * (c.fit?.total ?? 0.5) + (c.bonus || 0));
+  const top = Math.max(...logits);
+  const weights = logits.map((l) => Math.exp((l - top) / temperature));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const probs = weights.map((w) => w / total);
+  let r = random();
+  let index = probs.length - 1;
+  for (let i = 0; i < probs.length; i++) {
+    if ((r -= probs[i]) <= 0) { index = i; break; }
+  }
+  return { index, probs, logits };
 }
 
 // scores: from rules.js. advice: { level: {opt: p}, ... } from Jev, or null. pins: { level?, register? } set by hand.

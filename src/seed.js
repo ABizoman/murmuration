@@ -4,6 +4,7 @@
 import { KEYS } from './theory.js';
 import { PACK_PROGRESSIONS } from './packs.js';
 import { songFromSeed } from './songs/index.js';
+import { MAX_SWING } from './clock.js';
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -24,6 +25,10 @@ export function seededRandom(...parts) {
   };
 }
 
+// Reproducible runs: with ?rng=<text> every agent samples from a stream fixed by (rng, who), so
+// the same seed and rng give the same music on one device and before/after clips are comparable.
+export const randomFor = (rng, who) => (rng ? seededRandom(rng, who) : Math.random);
+
 export const PROGRESSIONS = {
   minor: [
     ['i', 'VI', 'III', 'VII'],
@@ -41,12 +46,15 @@ export const PROGRESSIONS = {
   ],
 };
 
+// Swing is shared timing: it must be a plain number in range on every device.
+const clampSwing = (x) => Math.min(MAX_SWING, Math.max(0, Number(x) || 0));
+
 export function structureFromSeed(seed) {
   // "song:<id>" plays a fixed song: its own key, tempo and chords, and the agents build it up.
   const song = songFromSeed(seed);
   if (song) {
     const { id, title, composer, build, voices, react } = song;
-    return { seed, key: song.key, mode: song.mode, bpm: song.bpm, progression: song.progression, mood: `${title} (${composer})`, song: { id, title, composer, build, voices, react: !!react } };
+    return { seed, key: song.key, mode: song.mode, bpm: song.bpm, progression: song.progression, swing: clampSwing(song.swing), mood: `${title} (${composer})`, song: { id, title, composer, build, voices, react: !!react } };
   }
   const r = seededRandom(seed, 'structure');
   const mode = r() < 0.6 ? 'minor' : 'major';
@@ -55,5 +63,7 @@ export function structureFromSeed(seed) {
   // The built-in progressions plus the mood-tagged ones from free-midi-chords.
   const list = [...PROGRESSIONS[mode].map((chords) => ({ chords, mood: '' })), ...(PACK_PROGRESSIONS[mode] || [])];
   const pick = list[Math.floor(r() * list.length)];
-  return { seed, key, mode, bpm, progression: pick.chords, mood: pick.mood };
+  // Swing is drawn last on purpose: every seed keeps the key, tempo and progression it had before.
+  const swing = clampSwing(Math.round(r() * 60) / 1000); // 0 to 0.06 of a 16th: upbeat pop, not jazz
+  return { seed, key, mode, bpm, progression: pick.chords, swing, mood: pick.mood };
 }
