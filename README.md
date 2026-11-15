@@ -113,11 +113,10 @@ it as a new song, for everyone (`songWins`: a newer song generation wins over th
 
 ## Grow mode
 
-Menu → **Grow** (or `?grow=1`, carried in the seed as `#grow`): each device plays only its own part,
+**On by default** (Menu → Grow; `?grow=0` starts with it off; carried in the seed as `#grow`): each device plays only its own part,
 claimed in band order (drums, bass, chords, melody, pad, arpeggio, percussion), so the song takes
-shape one device at a time; no section sits a joined part out. Off (the default): the first device
-plays the whole band and newcomers take parts over. To show the band building up: open the first
-device on `/?grow=1` (it plays the drums), then let phones join one by one.
+shape one device at a time; no section sits a joined part out. Off (untick it, or `?grow=0`): the
+first device plays the whole band and newcomers take parts over, handy for testing on one machine.
 
 ## Telling the band what to play
 
