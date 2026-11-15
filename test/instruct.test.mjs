@@ -135,3 +135,16 @@ test('agent: an asked-for instrument applies from the next phrase, even mid-sect
   agent.pinInteraction = null;
   assert.equal(peers.length, undefined);
 });
+
+test('"take out the drums" works in every section, chorus and fills included', async () => {
+  const { simulateBand, byRole } = await import('../tools/sim.mjs');
+  // pin the drums to rest from the start of the song and play through verse, pre, chorus
+  const { parts, directive } = simulateBand({ seed: 'restdrums', rng: 'r', phrases: 10, devices: 1, setup: (agents) => Object.assign(agents.drums, { auto: false, level: 0, register: 0 }) });
+  const drums = byRole(parts).drums;
+  assert.ok(drums.length >= 10);
+  for (const x of drums) assert.deepEqual(x.part.notes, [], `phrase ${x.phrase} (${directive(x.phrase).section}) is silent`);
+  // and "busier" beats a section that would cap it: a light-plan intro, a dance melody that never goes busy
+  const busy = simulateBand({ seed: 'busymelody', rng: 'r', phrases: 6, devices: 1, setup: (agents) => Object.assign(agents.melody, { auto: false, level: 3, register: 0 }) });
+  const mel = byRole(busy.parts).melody.filter((x) => x.phrase >= 1);
+  assert.ok(mel.every((x) => x.part.d.level === 3), mel.map((x) => x.part.d.level).join(','));
+});

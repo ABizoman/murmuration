@@ -17,7 +17,7 @@
 
 import { DENSITIES } from './loops.js';
 import { renderPhrase } from './render.js';
-import { ruleScores, runLength, SECTION_PHRASES } from './decide/rules.js';
+import { ruleScores, runLength, SECTION_PHRASES, REGISTERS } from './decide/rules.js';
 import { decide, candidateDecisions, pickCandidate, jevMultipliers, CONTINUITY_BONUS_BY_ROLE, CONTINUITY_HOLD, QUESTIONS } from './decide/select.js';
 import { applyInteraction } from './decide/transform.js';
 import { fitScore, describeFit } from './decide/fit.js';
@@ -111,6 +111,10 @@ export class Agent {
     // An asked-for instrument or pairing applies from the next phrase, even mid-section or when the
     // rules wouldn't offer it (the rules only change instruments at a section start).
     if (pins.voice && scores.voice && !(pins.voice in scores.voice) && (VOICES[this.role] || []).some((v) => v.id === pins.voice)) scores.voice = { ...scores.voice, [pins.voice]: 1 };
+    // The same for an asked-for level or register: the section's plan caps busyness ("the verse
+    // has no resting drums"), but "take out the drums" or "busier" must still happen.
+    if (pins.level != null && scores.level && !(pins.level in scores.level)) scores.level = { ...scores.level, [pins.level]: 1 };
+    if (pins.register != null && scores.register && !(pins.register in scores.register) && (REGISTERS[this.role] || [0]).includes(pins.register)) scores.register = { ...scores.register, [pins.register]: 1 };
     const target = pins.interaction?.split(':')[1];
     if (target && scores.interaction && !(pins.interaction in scores.interaction) && ctx.peers?.[target]?.notes?.length) scores.interaction = { ...scores.interaction, [pins.interaction]: 1 };
     const { d: sampled, dist, usedJev } = decide(scores, advice?.answers, Object.keys(pins).length ? pins : null, this.random);
@@ -127,7 +131,7 @@ export class Agent {
       random: this.random,
     });
     // A hook section: the hook goes in first, as it was first played.
-    if (hookLoop && ctx.hook) {
+    if (hookLoop && ctx.hook && this.auto) { // (not when someone pinned how busy/high it plays)
       const hd = { ...sampled, level: DENSITIES.indexOf(hookLoop.density) + 1, style: hookLoop.style, register: ctx.hookEntry.register, interaction: 'none' };
       drawn.unshift({ d: hd, kind: 'hook', loopId: hookLoop.id });
     }
@@ -189,7 +193,9 @@ export class Agent {
     const meta = { d, p, dist, source, reasons, fit: win.fit, candidates: cands.length, rank, chance: probs[index], fresh };
 
     // The seams between sections (transitions.js): fills, crash, riser, the breakdown's drop.
-    const arranged = applyTransitions(win.notes, { role: this.role, dir: ctx.directive, structure: ctx.structure, phrase: ctx.phrase });
+    // a part someone told to rest stays silent: no crash, fill or riser either
+    const rested = !this.auto && this.level === 0;
+    const arranged = rested ? [] : applyTransitions(win.notes, { role: this.role, dir: ctx.directive, structure: ctx.structure, phrase: ctx.phrase });
     if (!arranged.length) {
       const why = d.level === 0 ? `resting${reasons[0] ? ` (${reasons[0]})` : ''}` : `no "${d.style}" pattern in my library`;
       return { notes: [], ...meta, why };

@@ -31,7 +31,8 @@ export function libraryFor(structure) {
 
 // Returns { structure, form, directive, engine(s), events, parts: [{ phrase, role, part }], played }.
 // `parts` holds what each part's owner composed (one entry per phrase and role).
-export function simulateBand({ seed = 'durhack', rng = 'qa', phrases = 40, getDirective = null, engineOptions = {}, agentOptions = {}, devices = 1, latencyMs = 60 } = {}) {
+// setup(agentsByRole): optional, to pin agents before the song starts (as a typed instruction does).
+export function simulateBand({ seed = 'durhack', rng = 'qa', phrases = 40, getDirective = null, engineOptions = {}, agentOptions = {}, devices = 1, latencyMs = 60, setup = null } = {}) {
   const structure = structureFromSeed(seed);
   const library = libraryFor(structure);
   // As main.js does: the form leads (improvising), the director's directive nudges (default here).
@@ -46,7 +47,11 @@ export function simulateBand({ seed = 'durhack', rng = 'qa', phrases = 40, getDi
   const engines = groups.map((mine, i) => {
     const id = devices > 1 ? `dev-${mine[0]}` : 'local';
     const e = new Engine({
-      agents: ROLES.map((r) => new Agent(r, library, randomFor(rng, r), agentOptions)),
+      agents: (() => {
+        const list = ROLES.map((r) => new Agent(r, library, randomFor(rng, r), agentOptions));
+        setup?.(Object.fromEntries(list.map((a) => [a.role, a])));
+        return list;
+      })(),
       now: () => t,
       id,
       audio: { play: (role, note, when) => played.push({ role, note, when, device: id }) },
