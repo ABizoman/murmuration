@@ -78,7 +78,7 @@ test('patches: the pad is the stereo one (chorus), polyphony is capped, the lead
   t.after(() => audio.dispose());
   const pad = played(audio, 'chords', { midis: [60, 64, 67] }, 'synth-pad')[0].node;
   assert.equal(pad.opts.maxPolyphony, 12);
-  assert.equal(pad.opts.oscillator.type, 'fatsawtooth');
+  assert.equal(pad.opts.oscillator.type, 'sawtooth', 'one saw per note: the CPU fix (the chorus gives the width)');
   assert.ok(routes(pad).every((p) => /Filter\(1600 lowpass\) -> Chorus/.test(p)));
   const chorus = nodes.find((n) => n.kind === 'Chorus');
   assert.ok(chorus.started != null, 'a Tone.Chorus does nothing until started');
@@ -87,6 +87,14 @@ test('patches: the pad is the stereo one (chorus), polyphony is capped, the lead
   const pluck = played(audio, 'melody', { midi: 76 }, 'synth-pluck')[0].node;
   assert.equal(pluck.opts.maxPolyphony, 6);
   assert.ok(routes(pluck).every((p) => p.includes('Filter(2200 lowpass)')));
+  assert.equal(pluck.opts.oscillator.type, 'triangle');
+  // the stab: plain voices into one shared filter, whose envelope fires once per chord
+  const hits = played(audio, 'chords', { midis: [60, 64, 67] }, 'synth-stab');
+  assert.equal(hits.filter((h) => h.node.kind === 'FrequencyEnvelope').length, 1, 'one filter envelope per chord');
+  const stab = hits.find((h) => h.node.kind === 'PolySynth').node;
+  assert.equal(stab.voice, 'Synth');
+  assert.ok(routes(stab).every((p) => p.includes('Filter(300 lowpass)')));
+  assert.equal(nodes.filter((n) => n.kind === 'FrequencyEnvelope').length, 1);
   played(audio, 'melody', { midi: 76 }, 'synth-lead', 800);
   const vib = nodes.find((n) => n.kind === 'Vibrato');
   const [cancel, set, ramp] = vib.depth.events;
