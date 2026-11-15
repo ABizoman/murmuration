@@ -1,5 +1,6 @@
-// Signalling server. It hosts the page and introduces devices to each other; it never carries music.
-// Once two devices have a WebRTC data channel, this server can be killed and they keep talking.
+// Signalling server. It hosts the page and introduces devices to each other. Once two devices have
+// a WebRTC data channel, this server can be killed and they keep talking. When the network blocks
+// the direct link (venue Wi-Fi, a firewall), it relays their messages instead.
 //
 //   node server.js            (PORT=8000 by default)
 
@@ -109,6 +110,9 @@ wss.on('connection', (ws) => {
       log(`+ ${id} joined (${clients.size} connected)`);
     } else if (msg.type === 'signal' && id) {
       clients.get(msg.to)?.send(JSON.stringify({ type: 'signal', from: id, data: msg.data }));
+    } else if (msg.type === 'relay' && id) {
+      // music traffic for devices whose direct link is blocked (mesh.js relay fallback)
+      clients.get(msg.to)?.send(JSON.stringify({ type: 'relay', from: id, data: msg.data }));
     }
   });
   ws.on('close', () => {

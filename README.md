@@ -140,6 +140,10 @@ then the melody. (`murmur-pop` is the earlier, brighter pop draft.)
   (laptop and phones all on it) always works. The terminal prints the address in the QR code and the
   other addresses of the laptop ("if phones can't reach it, try …"); `HOST=<address> node server.js`
   picks one. Tone.js now comes from the laptop (`npm install` once), so phones need no internet.
+- *Every device plays its own whole band* (Swarm shows only "me"): the devices can't link up.
+  If the direct link is blocked (venue Wi-Fi, Windows firewall on a "public" network) they now
+  fall back to talking through the server after ~3.5 s (Swarm's link column says "via server"); in
+  that case killing the server does stop them, so skip that resilience moment.
 
 Also available: `?demo=murmur-pop` (the pop draft, about 2:27) and `?demo=ode-to-joy-pop` (a pop
 arrangement of Beethoven's theme, about 1:55).

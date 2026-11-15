@@ -51,7 +51,11 @@ export class Swarm {
       onMessage: (from, msg) => this.onMessage(from, msg),
       onPeerOpen: (pid) => this.onPeerOpen(pid),
       onPeerClose: (pid, why) => this.onPeerClose(pid, why),
-      onStatus: ({ server }) => {
+      onStatus: ({ server, relay }) => {
+        if (relay) {
+          this.ev.log(`no direct link to ${relay} (blocked by the network?): talking through the server`);
+          return this.ev.change();
+        }
         this.server = server;
         this.ev.log(server === 'up' ? 'signalling server connected' : 'signalling server unreachable: existing links keep working');
         this.ev.change();
@@ -286,6 +290,7 @@ export class Swarm {
       peers: [...this.peers.entries()].map(([id, p]) => ({
         id,
         direct: this.mesh.isOpen(id),
+        relayed: this.mesh.relayed.has(id), // through the server (mesh.js relay fallback)
         rtt: this.clock.error(id)?.rtt,
         err: this.clock.error(id)?.err,
         state: p.state,

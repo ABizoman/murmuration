@@ -541,7 +541,7 @@ function renderSwarm() {
   const rows = v.peers
     .map((p) => {
       const s = p.state;
-      return `<tr><td>${p.id}</td><td>${p.direct ? 'direct' : 'via gossip'}</td><td>${p.rtt != null ? Math.round(p.rtt) + ' ms' : '–'}</td>
+      return `<tr><td>${p.id}</td><td>${p.relayed ? 'via server' : p.direct ? 'direct' : 'via gossip'}</td><td>${p.rtt != null ? Math.round(p.rtt) + ' ms' : '–'}</td>
         <td>${p.err != null ? (p.err >= 0 ? '+' : '') + p.err.toFixed(1) + ' ms' : '–'}</td>
         <td>${s?.playing ? 'playing' : s ? 'listening' : '…'}</td><td>${s?.claim?.role ?? '–'}</td><td>${(s?.roles || []).join(' + ') || '–'}</td></tr>`;
     })

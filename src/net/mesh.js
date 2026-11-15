@@ -1,11 +1,19 @@
 // WebRTC mesh. The signalling server is only used to swap offers/answers/ICE candidates.
 // Rule (from the plan): the newcomer sends an offer to every device already there.
 // After a data channel opens, all music traffic goes device to device.
+//
+// Relay fallback: venue Wi-Fi and the Windows firewall (on a "public" network) often block the
+// direct link, while every device can still reach the server. If a device the server introduced
+// has no open channel after RELAY_AFTER_MS (or its link fails), messages to it go through the
+// server's WebSocket instead ({ type: 'relay', to, data }). The rest of the app can't tell the
+// difference. If the direct link opens later, it takes over. A relayed link needs the server.
 
 const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
+export const RELAY_AFTER_MS = 3500;
 
 export class Mesh {
-  constructor({ id, signalUrl, onMessage, onPeerOpen, onPeerClose, onStatus }) {
+  constructor({ id, signalUrl, onMessage, onPeerOpen, onPeerClose, onStatus, relayAfterMs = RELAY_AFTER_MS }) {
+    this.relayAfterMs = relayAfterMs;
     this.id = id;
     this.signalUrl = signalUrl;
     this.onMessage = onMessage;
@@ -13,6 +21,9 @@ export class Mesh {
     this.onPeerClose = onPeerClose || (() => {});
     this.onStatus = onStatus || (() => {});
     this.peers = new Map(); // id -> { pc, dc, pending: [], open }
+    this.relayed = new Set(); // ids reached through the server instead of a direct channel
+    this.known = new Set(); // ids the server says are connected
+    this.relayTimers = new Map();
     this.ws = null;
     this.serverUp = false;
     this.retryMs = 1000;
@@ -52,16 +63,46 @@ export class Mesh {
   async onSignal(msg) {
     if (msg.type === 'peers') {
       // I'm the newcomer: offer to everyone already there that I'm not already connected to.
-      for (const pid of msg.ids) if (!this.isOpen(pid)) this.offer(pid);
+      for (const pid of msg.ids) {
+        this.known.add(pid);
+        this.relayLater(pid);
+        if (!this.isOpen(pid)) this.offer(pid).catch(() => {});
+      }
+    } else if (msg.type === 'peer-joined') {
+      this.known.add(msg.id);
+      this.relayLater(msg.id); // its offer should arrive; if no channel opens, relay
     } else if (msg.type === 'peer-left') {
+      this.known.delete(msg.id);
       this.drop(msg.id, 'left (server)');
     } else if (msg.type === 'signal') {
       await this.handle(msg.from, msg.data);
+    } else if (msg.type === 'relay') {
+      if (!this.isOpen(msg.from)) this.useRelay(msg.from); // it relays to me: relay back
+      this.onMessage(msg.from, msg.data);
     }
   }
 
   isOpen(pid) {
+    return this.peers.get(pid)?.open === true || this.relayed.has(pid);
+  }
+
+  isDirect(pid) {
     return this.peers.get(pid)?.open === true;
+  }
+
+  relayLater(pid) {
+    clearTimeout(this.relayTimers.get(pid));
+    this.relayTimers.set(pid, setTimeout(() => {
+      this.relayTimers.delete(pid);
+      if (!this.isOpen(pid) && this.known.has(pid)) this.useRelay(pid);
+    }, this.relayAfterMs));
+  }
+
+  useRelay(pid) {
+    if (this.relayed.has(pid) || this.isDirect(pid) || this.ws?.readyState !== 1) return;
+    this.relayed.add(pid);
+    this.onStatus({ relay: pid });
+    this.onPeerOpen(pid);
   }
 
   makePeer(pid) {
@@ -71,7 +112,14 @@ export class Mesh {
     this.peers.set(pid, peer);
     pc.onicecandidate = (e) => e.candidate && this.sendSignal(pid, { candidate: e.candidate.toJSON() });
     pc.onconnectionstatechange = () => {
-      if (['failed', 'closed'].includes(pc.connectionState)) this.drop(pid, pc.connectionState);
+      if (this.peers.get(pid)?.pc !== pc) return;
+      if (pc.connectionState === 'failed' && this.known.has(pid) && this.ws?.readyState === 1) {
+        // the direct link failed but the server can still reach it: carry on through the server
+        const wasDirect = peer.open;
+        this.peers.delete(pid);
+        try { pc.close(); } catch {}
+        if (wasDirect) { this.relayed.add(pid); this.onStatus({ relay: pid }); } else this.useRelay(pid);
+      } else if (['failed', 'closed'].includes(pc.connectionState)) this.drop(pid, pc.connectionState);
     };
     pc.ondatachannel = (e) => this.attach(pid, peer, e.channel);
     return peer;
@@ -80,10 +128,14 @@ export class Mesh {
   attach(pid, peer, dc) {
     peer.dc = dc;
     dc.onopen = () => {
+      const was = this.isOpen(pid);
       peer.open = true;
-      this.onPeerOpen(pid);
+      this.relayed.delete(pid); // a direct link takes over from the relay
+      if (!was) this.onPeerOpen(pid);
     };
-    dc.onclose = () => this.drop(pid, 'channel closed');
+    dc.onclose = () => {
+      if (this.peers.get(pid)?.dc === dc) this.drop(pid, 'channel closed');
+    };
     dc.onmessage = (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
@@ -115,22 +167,31 @@ export class Mesh {
     }
   }
 
+  // Forget a device entirely: its direct link and its relay. (makePeer() calls this with no
+  // reason to replace a link; the relay is kept then, until the new link opens.)
   drop(pid, reason) {
     const peer = this.peers.get(pid);
-    if (!peer) return;
-    this.peers.delete(pid);
-    const wasOpen = peer.open;
-    try { peer.dc?.close(); } catch {}
-    try { peer.pc.close(); } catch {}
-    if (wasOpen && reason) this.onPeerClose(pid, reason);
+    const wasOpen = this.isOpen(pid);
+    if (peer) {
+      this.peers.delete(pid);
+      try { peer.dc?.close(); } catch {}
+      try { peer.pc.close(); } catch {}
+    }
+    if (reason) {
+      this.relayed.delete(pid);
+      clearTimeout(this.relayTimers.get(pid));
+      if (wasOpen) this.onPeerClose(pid, reason);
+    }
   }
 
   send(pid, msg) {
     const p = this.peers.get(pid);
     if (p?.open && p.dc.readyState === 'open') p.dc.send(JSON.stringify(msg));
+    else if (this.relayed.has(pid) && this.ws?.readyState === 1) this.ws.send(JSON.stringify({ type: 'relay', to: pid, data: msg }));
   }
 
   openPeers() {
-    return [...this.peers.entries()].filter(([, p]) => p.open).map(([id]) => id);
+    const direct = [...this.peers.entries()].filter(([, p]) => p.open).map(([id]) => id);
+    return [...new Set([...direct, ...this.relayed])];
   }
 }
