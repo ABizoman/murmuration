@@ -46,9 +46,21 @@ const top = (probs) => {
   return best;
 };
 
+const NO_CHANGE = { level: 'same', register: 'same', instrument: 'same', interaction: 'none', song: 'none' };
+const RUNNER_UP = 0.25; // a "maybe" the AI gave at least this much counts when nothing else changes
+
 // The AI's answers ({ questionId: { option: probability } }) -> a command, as parseInstruction returns.
 export function commandFromAnswers(answers, { agents = {}, mine = [] } = {}) {
   const a = Object.fromEntries(['target', 'level', 'register', 'instrument', 'interaction', 'song'].map((k) => [k, top(answers?.[k])]));
+  // Never spotlight a part that was just told to rest: take the next song option instead.
+  if (a.song === 'spotlight' && a.level === 'rest') a.song = top(Object.fromEntries(Object.entries(answers.song || {}).filter(([k, v]) => k !== 'spotlight' && v >= RUNNER_UP))) || 'none';
+  // Unsure ("make the bass sound underwater": no change 63%, lower 36%): if every answer is "no
+  // change", use the strongest change it gave at least RUNNER_UP.
+  if (Object.entries(NO_CHANGE).every(([q, none]) => !a[q] || a[q] === none)) {
+    let best = null;
+    for (const [q, none] of Object.entries(NO_CHANGE)) for (const [k, v] of Object.entries(answers?.[q] || {})) if (k !== none && v >= RUNNER_UP && (!best || v > best.v)) best = { q, k, v };
+    if (best) a[best.q] = best.k;
+  }
   const roles = a.target === 'all' ? ROLES : a.target === 'mine' ? (mine.length ? mine : ROLES) : ROLES.includes(a.target) ? [a.target] : [];
   const changes = [];
   for (const role of roles) {

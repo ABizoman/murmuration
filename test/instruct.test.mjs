@@ -86,6 +86,12 @@ test('the AI answers choice questions; the answers become the same kind of comma
   assert.ok(cmd.understood);
   const nothing = commandFromAnswers({ target: { mine: 1 }, level: { same: 1 }, register: { same: 1 }, instrument: { same: 1 }, interaction: { none: 1 }, song: { none: 1 } }, { agents: fresh(), mine: ['chords'] });
   assert.equal(nothing.understood, false, 'an answer that changes nothing is "didn\'t catch that"');
+  // unsure: the runner-up counts when nothing else changes; no spotlight on a resting part
+  const unsure = commandFromAnswers({ target: { bass: 1 }, level: { same: 0.92, calmer: 0.08 }, register: { same: 0.63, lower: 0.36 }, instrument: { same: 0.78, synth: 0.21 }, interaction: { none: 1 }, song: { none: 0.84, spotlight: 0.12 } }, { agents: fresh() });
+  assert.deepEqual(unsure.changes, [{ role: 'bass', set: { auto: false, level: 2, register: 0 } }], 'the bass has no lower register: level kept, register clamped');
+  const rest = commandFromAnswers({ target: { drums: 0.9 }, level: { rest: 0.86 }, instrument: { strings: 0.6 }, song: { spotlight: 0.53, calm: 0.32, none: 0.15 } }, { agents: fresh() });
+  assert.deepEqual(rest.changes, [{ role: 'drums', set: { auto: false, level: 0, register: 0 } }]);
+  assert.equal(rest.song.energy, 0.15, 'calm instead of a spotlight on the resting drums');
   const self = commandFromAnswers({ target: { bass: 1 }, interaction: { answer_bass: 1 } }, { agents: fresh() });
   assert.equal(self.understood, false, 'a part never answers itself');
 });
