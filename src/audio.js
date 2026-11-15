@@ -12,7 +12,7 @@
 import { VOICES, voiceById, DRUM_FILES } from './voices.js';
 import { kindOf } from './loops.js';
 import { newMeters, addMeterSample } from './listen.js';
-import { MIX, DRUM_STRIP, PUMP, mixFor, isWeakDevice, dbToGain } from './mix.js';
+import { MIX, DRUM_STRIP, PUMP, SWEEP, sweepHz, mixFor, isWeakDevice, dbToGain } from './mix.js';
 
 const Tone = window.Tone;
 const DRUM_NOTE = { kick: 'C2', snare: 'D2', hihat: 'F#2', ohat: 'A#2', tom1: 'D3', tom2: 'B2', tom3: 'G2' };
@@ -267,11 +267,13 @@ function buildMix(mix) {
   }
 
   const strip = {};
+  const sweeps = {}; // strip name -> its build-up lowpass
   const hallSends = [];
   const wideners = [];
   for (const [name, spec] of Object.entries(mix.strips)) {
     const chain = [];
     if (spec.hp) chain.push(new Tone.Filter(spec.hp, 'highpass'));
+    if (spec.sweep) chain.push((sweeps[name] = new Tone.Filter({ type: 'lowpass', frequency: SWEEP.open, Q: SWEEP.q })));
     if (spec.eq) chain.push(new Tone.EQ3({ low: 0, mid: 0, high: 0, ...spec.eq }));
     if (spec.widen != null) {
       const w = new Tone.StereoWidener(spec.widen);
@@ -289,7 +291,7 @@ function buildMix(mix) {
     }
     strip[name] = chain[0];
   }
-  return { strip, buses, ducks, fx, hallSends, wideners };
+  return { strip, buses, ducks, fx, hallSends, wideners, sweeps };
 }
 
 export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
@@ -298,7 +300,7 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
 
   let isLite = lite == null ? isWeakDevice(globalThis.navigator) : !!lite;
   const mix = mixFor(isLite);
-  const { strip, ducks, fx, hallSends, wideners } = buildMix(mix);
+  const { strip, ducks, fx, hallSends, wideners, sweeps } = buildMix(mix);
   // Patches are built the first time something plays through them.
   // One instance per (patch, part): the chords' pad and the pad part's pad are separate synths, each
   // into its own part's strip at its own level.
@@ -328,6 +330,19 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
 
   // The pop "pump": every kick dips the bass and chord buses, which come back over 120 ms.
   let pump = PUMP.normal;
+  // The build-up (transitions.js): from this note to the end of the phrase, the part's lowpass
+  // opens from dark to bright, then snaps back out of the way on the chorus downbeat. The note
+  // carries how many steps are left, so a part that starts late joins the sweep where it stands.
+  function sweepAt(filter, t, steps, sSec) {
+    const f = filter.frequency;
+    const frac = 1 - steps / 64;
+    const secs = steps * sSec;
+    f.cancelScheduledValues(t);
+    f.setValueAtTime(sweepHz(frac), t);
+    f.exponentialRampToValueAtTime(SWEEP.to, t + secs);
+    f.setValueAtTime(SWEEP.open, t + secs);
+  }
+
   function duckAt(t) {
     for (const [name, g] of Object.entries(ducks)) {
       g.gain.cancelScheduledValues(t);
@@ -476,6 +491,7 @@ export async function createAudio({ onStatus = () => {}, lite = null } = {}) {
       const d = durMs / 1000;
       const sSec = stepMs / 1000;
       if (role === 'drums' && n.drum === 'kick') duckAt(t); // whichever kit (or synth) plays it
+      if (n.sweep && sweeps[role]) sweepAt(sweeps[role], t, n.sweep, sSec);
       const s = samplers.get(voiceId);
       if (!s) {
         if (voiceId && !voiceById[voiceId]?.synth) ensure(voiceId); // the role's default patch until it's loaded

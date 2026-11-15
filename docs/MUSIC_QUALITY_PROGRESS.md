@@ -801,3 +801,33 @@ plain, the beat is wrong, and it is too happy or bright. So:
   and the sampled layer voices are estimated, not measured).
 - QA (7 devices, `docs/qa/H2-seven-parts.txt`): ensemble band 0.91, chords clash 0.98, pad 0.97,
   arp 0.98; form checks all pass. Tests **156**.
+
+## Round 2, step 3 — build-ups and drops
+
+"Sections should arrive, not loop." All of it is baked into the note data at compose time
+(`transitions.js`, after scoring, before `humanise`), so every device, double and takeover plays
+the same build-up. `formDirective` gained `buildUp` (the last phrase of a non-hook section whose
+next section is a hook: pre → chorus, verse2 → chorus, breakdown → finalChorus; in Murmur also the
+second pre and the breakdown's last phrase), `nextHook` and `nextPlan`.
+- **Filter sweep:** in a build-up the first note of the chords, pad and arp carries `sweep` = the
+  steps left in the phrase. `audio.js` then ramps that strip's new lowpass (`mix.js` `sweep: true`
+  on chords, pad, arp; `SWEEP`: rests at 20 kHz, 350 Hz → 9 kHz exponentially, Q 1.4) from the note
+  to the chorus downbeat, where it snaps back open. `sweep` survives `sanitiseNotes` (1..64).
+- **Drop:** in a build-up the drums, bass and perc leave the last half bar (from step 56) empty;
+  nothing rings into it. The drum fill moves to end at the drop (always 8 steps there, and always
+  written, so the loop's own fill isn't cut in half). The riser stays.
+- **Bass walk:** into every other new section (verse → pre, chorus → verse2, outro → verse2, into
+  the coda, and Murmur's intro2 → verse etc.) the bass's last beats become 3 quarter notes (from
+  beat 2) or 4 eighths (from beat 3), seeded per phrase: neighbouring scale notes walking to the next
+  section's first chord root (`chordAt(phrase + 1, 0)`), from below, or from above when the bass
+  was higher or walking up would go under E1. No walk into a hook section (that gets the drop), or
+  when the bass sits out of the next section.
+- QA (`docs/qa/H3-buildups.txt`) now reports `build-ups: drops 90/90 · sweeps 105/105 · bass walks
+  10/10` (Murmur: 6/6 · 9/9 · 6/6); the old form checks all pass (fills 60/60). The ensemble bass
+  clash drops 1.00 → 0.95: the walk's passing notes cross the current chord on the off-beats, as
+  walks do. Tests **162** (`test/round2-step3.test.mjs`).
+- Judgement calls: the sweep spans the whole last phrase (the pre is one phrase, so the pre *is*
+  the build); the melody isn't swept or dropped (it carries the tune across the gap). No level
+  change (the lowpass rests at 20 kHz), so nothing was re-measured.
+- Needs ears: is the sweep's start too dark (raise `SWEEP.from`) or the resonance too much (`q`)?
+  Is half a bar of drop right, or should it be a full bar (`DROP_AT` 48)?

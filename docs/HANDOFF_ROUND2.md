@@ -27,7 +27,7 @@ files named below.
 
 - GitHub `ABizoman/murmuration`, branch **`music-quality-phases-4-7`** (all work is here; `main`
   has only phases 0–3). Push to this branch. No PR yet; ask before opening one.
-- `npm test` — **156 passing** (Node only, `node --test test/*.test.mjs`).
+- `npm test` — **162 passing** (after step 3) (Node only, `node --test test/*.test.mjs`).
 - `npm run qa` — music QA report in Node (5 seeds × 40 phrases, one simulated device per part with
   60 ms gossip; `--devices 1`, `--horizons uniform`, `--seeds "song:murmur" --phrases 20`,
   `--save <name>` writes `docs/qa/<name>.txt`). Reports fit per part, loop/instrument changes,
@@ -98,7 +98,7 @@ Claim order: chords, drums, bass, melody, pad, arp, perc; fewer devices cover th
 
 ## 4. Steps left (agreed with the person; do them in this order, push + write-up after each)
 
-### Step 3 — build-ups and drops (estimate ~30–45 min)
+### Step 3 — build-ups and drops — DONE (see `MUSIC_QUALITY_PROGRESS.md`, round 2 step 3)
 Make sections feel like they arrive, not loop. All of it must be deterministic and shared (baked
 into note data at compose time, or computed identically from the structure/phrase — never
 per-device randomness at playback; see ground rules in `MUSIC_QUALITY_HANDOFF.md` §2).

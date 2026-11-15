@@ -1,7 +1,7 @@
 // The mix, as data (Phase 2 of docs/MUSIC_QUALITY_PLAN.md). audio.js builds the Tone.js graph
 // straight from here, so the whole signal flow can be read -- and tested -- in one place.
 //
-//   per part:  sampler/synth -> strip (highpass + EQ3 + pan; a widener if a strip asks) -> bus  (+ sends)
+//   per part:  sampler/synth -> strip (highpass + sweep lowpass + EQ3 + pan; a widener if a strip asks) -> bus  (+ sends)
 //   drums bus  -> Compressor -> master            (kick, snare/toms and hats have their own strips,
 //   bass bus   -> duck -> Compressor -> master     so the hats can be filtered and panned and the
 //   chords bus -> duck -> master                   snare can have more room than the kick)
@@ -16,7 +16,8 @@
 
 export const MIX = {
   // hp: highpass in Hz. eq: Tone.EQ3 settings. pan: -1..1. widen: Tone.StereoWidener width.
-  // room/hall/delay: send amounts. bus: which bus the strip feeds.
+  // room/hall/delay: send amounts. bus: which bus the strip feeds. sweep: the strip has a lowpass
+  // that sits wide open and is swept up through the build-up before a chorus (SWEEP below).
   strips: {
     kick: { bus: 'drums', pan: 0, room: 0.08 }, // the kick is left alone: no filter, dead centre
     body: { bus: 'drums', pan: 0, room: 0.26 }, // snare and toms: more room than the kick
@@ -24,13 +25,13 @@ export const MIX = {
     bass: { bus: 'bass', pan: 0, hp: 35, eq: { mid: -2, lowFrequency: 150, highFrequency: 500 } },
     // No widener: the samples are mono, so StereoWidener added no width and cost level. Width comes
     // from the synth pad's stereo Chorus instead (audio.js).
-    chords: { bus: 'chords', pan: 0, hp: 180, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
+    chords: { bus: 'chords', pan: 0, hp: 180, sweep: true, hall: 0.22, eq: { mid: -2.5, lowFrequency: 220, highFrequency: 560 } },
     // a gentle top cut (was a +1.5 dB boost): the lead should be clear, not sharp
     melody: { bus: 'melody', pan: 0, hp: 220, hall: 0.16, delay: 0.18, eq: { high: -2, highFrequency: 3000 } },
     // the extra layers: the pad sits in the hall behind the chords (and pumps with them), the arp
     // a little to the right with more echo, the perc goes to the hats
-    pad: { bus: 'chords', pan: -0.1, hp: 250, hall: 0.35, eq: { high: -3, highFrequency: 4000 } },
-    arp: { bus: 'melody', pan: 0.25, hp: 300, hall: 0.12, delay: 0.3, eq: { high: -2, highFrequency: 3500 } },
+    pad: { bus: 'chords', pan: -0.1, hp: 250, sweep: true, hall: 0.35, eq: { high: -3, highFrequency: 4000 } },
+    arp: { bus: 'melody', pan: 0.25, hp: 300, sweep: true, hall: 0.12, delay: 0.3, eq: { high: -2, highFrequency: 3500 } },
   },
   buses: {
     drums: { comp: { threshold: -14, ratio: 4, attack: 0.01, release: 0.12, knee: 6 } },
@@ -50,6 +51,13 @@ export const MIX = {
   },
   duckMs: 120, // how long the bass and chords take to come back up after a kick
 };
+
+// The build-up's filter sweep (transitions.js `sweep`): the lowpass rests at `open` (out of the
+// way), drops to `from` when the sweep starts and rises exponentially (even to the ear) to `to`
+// at the chorus downbeat, then snaps back to `open`. `q` adds a little resonance at the cutoff.
+export const SWEEP = { open: 20000, from: 350, to: 9000, q: 1.4 };
+// The cutoff `frac` (0..1) of the way through a sweep.
+export const sweepHz = (frac) => SWEEP.from * (SWEEP.to / SWEEP.from) ** Math.min(1, Math.max(0, frac));
 
 // How hard the kick ducks the bass and chords (the "pump"), per style: 'normal' is the mix above;
 // 'dance' is the deep, breathing pump of house music. Chosen from the shared structure (the style,

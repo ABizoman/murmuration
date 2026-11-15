@@ -141,6 +141,11 @@ export function formDirective(form, phrase, director = DEFAULT_DIRECTIVE) {
     // what leads into the next section (fills and risers go in this phrase's last bar)
     nextTransitionIn: at.isLastPhrase && next && !next.ended ? [...next.section.transitionIn] : [],
     nextSection: at.isLastPhrase && next ? next.section.name : null,
+    nextHook: !!(at.isLastPhrase && next && !next.ended && next.section.hook),
+    nextPlan: at.isLastPhrase && next && !next.ended ? { ...next.section.plan } : null,
+    // the build-up (transitions.js): the last phrase of a section that leads into a hook section
+    // (pre -> chorus, verse2 -> chorus, breakdown -> finalChorus) sweeps open and drops out
+    buildUp: !!(at.isLastPhrase && !section.hook && !at.ended && next && !next.ended && next.section.hook),
     dropLastBar: !!(section.dropLastBar && at.isLastPhrase),
     end: !!section.end,
     ended: !!at.ended,

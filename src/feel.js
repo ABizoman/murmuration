@@ -140,6 +140,7 @@ export function sanitiseNotes(list, { maxNotes = 400 } = {}) {
     if (!n || !Number.isInteger(n.step) || n.step < 0 || n.step >= 64 || !(n.dur > 0)) continue;
     const note = { step: n.step, dur: num(n.dur, 0.25, 64, 1), vel: num(n.vel, 0, 1, 0.7) };
     if (Number.isFinite(n.nudge)) note.nudge = clamp(n.nudge, -MAX_NUDGE, MAX_NUDGE);
+    if (Number.isFinite(n.sweep)) note.sweep = clamp(Math.round(n.sweep), 1, 64); // transitions.js build-up
     if (typeof n.drum === 'string') note.drum = n.drum.slice(0, 12);
     else if (Number.isFinite(n.midi)) note.midi = clamp(Math.round(n.midi), 0, 127);
     else if (Array.isArray(n.midis) && n.midis.length && n.midis.length <= 8 && n.midis.every(Number.isFinite)) {

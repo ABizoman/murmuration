@@ -47,7 +47,7 @@ out(`(loop/voice changes count only consecutive phrases where the part plays in 
 const pooled = Object.fromEntries(ROLES.map((r) => [r, { fit: [], loop: [0, 0], voice: [0, 0], terms: {} }]));
 let melodyCont = [];
 const ensPooled = Object.fromEntries(ROLES.map((r) => [r, { total: [], terms: {}, fresh: {} }]));
-const formPooled = { hook: [0, 0], chorusCont: [], fills: [0, 0], crashes: [0, 0], risers: [0, 0], order: true, bad: [] };
+const formPooled = { hook: [0, 0], chorusCont: [], fills: [0, 0], crashes: [0, 0], risers: [0, 0], drops: [0, 0], sweeps: [0, 0], walks: [0, 0], order: true, bad: [] };
 const famPooled = { style: [0, 0], voice: [0, 0], worstBoundary: 0, offStyles: {}, offVoices: {} };
 
 for (const seed of SEEDS) {
@@ -104,6 +104,26 @@ for (const seed of SEEDS) {
       if (d.nextTransitionIn.includes('riser')) { riserAll++; if (tr.riser) risers++; else formPooled.bad.push(`${seed}: no riser at phrase ${p}`); }
       if (!d.isFirstPhrase && tr.crash) formPooled.bad.push(`${seed}: crash mid-section at phrase ${p}`);
       if (!d.nextTransitionIn.includes('riser') && tr.riser) formPooled.bad.push(`${seed}: riser in the wrong place at phrase ${p}`);
+      // the build-up (step 3): before a hook section the drums, bass and perc drop out from step 56
+      // and the chords, pad and arp sweep; into other sections the bass walks to the next root
+      for (const r of ['drums', 'bass', 'perc']) {
+        const x = part(r, p);
+        if (!d.buildUp || !x?.notes.some((n) => n.step < 48 && n.drum !== 'riser')) continue;
+        formPooled.drops[1]++;
+        if (transitionsIn(x.notes).drop) formPooled.drops[0]++; else formPooled.bad.push(`${seed}: ${r} plays through the drop at phrase ${p}`);
+      }
+      for (const r of ['chords', 'pad', 'arp']) {
+        const x = part(r, p);
+        if (!x?.notes.length) continue;
+        if (d.buildUp) { formPooled.sweeps[1]++; if (x.notes.some((n) => n.sweep)) formPooled.sweeps[0]++; else formPooled.bad.push(`${seed}: no ${r} sweep at phrase ${p}`); }
+        else if (x.notes.some((n) => n.sweep)) formPooled.bad.push(`${seed}: ${r} sweep in the wrong place at phrase ${p}`);
+      }
+      const bass = part('bass', p);
+      if (d.isLastPhrase && d.nextSection && !d.buildUp && !d.dropLastBar && !d.end && d.nextPlan?.bass !== 'out' && bass?.notes.some((n) => n.step < 52)) {
+        formPooled.walks[1]++;
+        const tail = (from) => bass.notes.filter((n) => n.step >= from).map((n) => n.step).join(',');
+        if (tail(52) === '52,56,60' || tail(56) === '56,58,60,62') formPooled.walks[0]++; else formPooled.bad.push(`${seed}: no bass walk at phrase ${p}`);
+      }
     }
     // sections in order: as written (the pop form, or the song's own "form"), then round again
     // from the loop point, or (ending songs) one "end" coda and nothing more
@@ -184,6 +204,7 @@ out(`  band ${f2(avg(ROLES.flatMap((r) => ensPooled[r].total)))}`);
 if (formPooled.hook[1] || formPooled.fills[1]) {
   const c = formPooled.chorusCont;
   out(`form: sections in order ${formPooled.order ? 'yes' : 'NO'} · hook in later chorus phrases ${pct(formPooled.hook[0] / (formPooled.hook[1] || 1))} · chorus melody continuity ${f2(c.length ? c.reduce((a, b) => a + b, 0) / c.length : null)} · fills ${formPooled.fills[0]}/${formPooled.fills[1]} · crashes ${formPooled.crashes[0]}/${formPooled.crashes[1]} · risers ${formPooled.risers[0]}/${formPooled.risers[1]}`);
+  out(`  build-ups: drops ${formPooled.drops[0]}/${formPooled.drops[1]} · sweeps ${formPooled.sweeps[0]}/${formPooled.sweeps[1]} · bass walks ${formPooled.walks[0]}/${formPooled.walks[1]}`);
   if (formPooled.bad.length) out(`  problems: ${formPooled.bad.slice(0, 8).join('; ')}`);
 }
 if (famPooled.style[1]) {
