@@ -497,8 +497,9 @@ function toast(text, kind = '') {
   el.className = kind;
   el.textContent = text;
   $('toasts').append(el);
-  setTimeout(() => el.classList.add('out'), 3600);
-  setTimeout(() => el.remove(), 4200);
+  const ms = text.length > 60 ? 6500 : 3600; // long ones (what an instruction changed) stay longer
+  setTimeout(() => el.classList.add('out'), ms);
+  setTimeout(() => el.remove(), ms + 600);
   while ($('toasts').children.length > 2) $('toasts').firstElementChild.remove();
 }
 function watchSwarm(v, engine) {
@@ -533,8 +534,14 @@ $('composer').addEventListener('submit', (e) => {
   if (quick.understood && !quick.stop && !mm().swarm.playing && !$('start').disabled) $('start').click();
   if (!quick.understood && !quick.stop) showHud('Thinking\u2026', { understood: true, summary: 'asking the AI what you mean', changes: [] });
   apply(text, { write: true, hud: false, ai: true }).then((result) => {
-    if (result && !result.understood) showHud('Hmm', result);
-    else if (result && !quick.understood) showHud(text, result);
+    if (!result) return;
+    // Say what changed, where, and when it will be heard: parts are written ahead, so a change
+    // lands at the next phrase, seconds later.
+    if (!result.understood) return toast(result.summary, 'warn');
+    const when = result.whenSec != null ? ` \u00B7 you\u2019ll hear it in ~${result.whenSec}s` : '';
+    const where = lastInstruction?.note ? ` \u00B7 ${lastInstruction.note}` : '';
+    toast(`\u2713 ${result.summary}${where}${when}`, 'good');
+    showHud(text, result);
   });
 });
 

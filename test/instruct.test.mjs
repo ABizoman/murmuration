@@ -148,3 +148,12 @@ test('"take out the drums" works in every section, chorus and fills included', a
   const mel = byRole(busy.parts).melody.filter((x) => x.phrase >= 1);
   assert.ok(mel.every((x) => x.part.d.level === 3), mel.map((x) => x.part.d.level).join(','));
 });
+
+test('a typed "build it up" moves the section energy fully; the LLM only nudges', async () => {
+  const { formFromStructure, formDirective } = await import('../src/form.js');
+  const form = formFromStructure(structureFromSeed('energy'));
+  const verse = 1;
+  const base = formDirective(form, verse).energy;
+  assert.ok(Math.abs(formDirective(form, verse, { energy: 1 }).energy - Math.min(1, base + 0.2)) < 1e-9, 'nudge');
+  assert.ok(Math.abs(formDirective(form, verse, { energy: 1 }, 1).energy - Math.min(1, base + 0.5)) < 1e-9, 'a request');
+});

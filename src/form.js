@@ -112,14 +112,16 @@ export function sectionAt(form, phrase) {
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 
 // The directive for a phrase: the form's section, nudged by the director's directive.
-export function formDirective(form, phrase, director = DEFAULT_DIRECTIVE) {
+// weight: how far the director's energy moves the section's (0.4 for the LLM's nudges; main.js
+// passes 1 for a typed "build it up", which should be heard).
+export function formDirective(form, phrase, director = DEFAULT_DIRECTIVE, weight = 0.4) {
   const at = sectionAt(form, phrase);
   if (!at) return director || DEFAULT_DIRECTIVE;
   const dir = director || DEFAULT_DIRECTIVE;
   const { section } = at;
   const next = sectionAt(form, phrase + 1);
   const sitting = (role) => role && section.plan[role] === 'out';
-  const energy = clamp(section.energy + 0.4 * ((dir.energy ?? 0.5) - 0.5), 0, 1);
+  const energy = clamp(section.energy + weight * ((dir.energy ?? 0.5) - 0.5), 0, 1);
   const feature = sitting(dir.feature) ? null : dir.feature ?? null;
   const pair = dir.pair && !sitting(dir.pair.who) && !sitting(dir.pair.whom) ? dir.pair : null;
   const drop = dir.drop && section.plan[dir.drop] === 'normal' ? dir.drop : null;

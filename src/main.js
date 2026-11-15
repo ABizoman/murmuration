@@ -225,7 +225,8 @@ const engine = new Engine({
   getCandidateAdvice: (phrase, role) => jev.ranking(phrase, role),
   // The form leads and the director nudges (form.js); with no form, the director alone.
   // A song with sections ignores the director: the song's form is the arrangement, on every device.
-  getDirective: (phrase) => (form ? formDirective(form, phrase, songHasForm() ? DEFAULT_DIRECTIVE : director.directiveFor(phrase)) : director.directiveFor(phrase)),
+  // A typed song-level request ("build it up") moves the energy fully; the LLM's proposals nudge.
+  getDirective: (phrase) => (form ? formDirective(form, phrase, songHasForm() ? DEFAULT_DIRECTIVE : director.directiveFor(phrase), director.current(phrase)?.source === 'request' ? 1 : 0.4) : director.directiveFor(phrase)),
   swing: FEEL,
   hooks: hookBook,
   id: swarm.id,
@@ -499,8 +500,20 @@ async function instruct(text, { ai = true } = {}) {
       director.propose(pos ? Math.max(0, pos.phrase) + 1 : 0, { energy: cmd.song.energy, feature: cmd.song.feature, drop: null, pair: null, note: cmd.song.note });
     }
   }
+  cmd.whenSec = secondsUntilHeard(cmd.changes.map((c) => c.role));
   renderAgents();
   return cmd;
+}
+
+// Roughly when a change is heard: parts are written a phrase ahead, so from the next phrase, or the
+// one after if this device already wrote the next one.
+function secondsUntilHeard(roles) {
+  const pos = engine.position();
+  if (!pos || !swarm.playing) return null;
+  const phraseSec = (STEPS_PER_PHRASE / 4) * (60 / engine.structure.bpm);
+  const toNext = phraseSec * (1 - (pos.stepFloat % STEPS_PER_PHRASE) / STEPS_PER_PHRASE);
+  const written = roles.some((r) => engine.phrases.get(pos.phrase + 1)?.local?.[r]);
+  return Math.round(toNext + (written ? phraseSec : 0));
 }
 
 // Another device's instruction: apply it to my copy of each agent (only the part I play is
