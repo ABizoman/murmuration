@@ -167,7 +167,11 @@
   .pill { height:40px; padding:0 18px; border-radius:999px; border:0; background:var(--tile); box-shadow:inset 0 1px 0 #fff, 0 4px 12px rgba(0,0,0,.06); cursor:pointer; }
   .group { background:#FFF; border-radius:20px; padding:14px; margin-bottom:12px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .group h3 { margin:0 0 10px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
-  .song-row { display:flex; gap:8px; flex-wrap:wrap; }
+  #muteIcon.muted path:last-child { display:none; } #muteIcon.muted { opacity:.45; }
+  .song-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  #song { width:100%; max-width:100%; min-width:0; }
+  .menu-hint { font-size:12px; color:var(--ink-2); margin:8px 0 0; line-height:1.4; }
+  #sheet details > summary { cursor:pointer; font-weight:600; }
   #song, #seed { height:40px; padding:0 12px; border-radius:12px; border:1px solid #E1E1E6; background:#FAFAFB; font-size:16px; }
   #song { flex:1 1 180px; } #seed { width:120px; }
   #me { font-weight:600; } #meRoles { color:var(--muted); font-size:13px; }
@@ -247,14 +251,14 @@
         <button class="zone z-top" type="button" data-act="menu" aria-label="Menu">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="8" r="2"/><circle cx="15" cy="8" r="2"/><circle cx="9" cy="16" r="2"/><circle cx="15" cy="16" r="2"/></svg>
         </button>
-        <button class="zone z-right" type="button" data-act="higher" aria-label="Go higher">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 6l9 6-9 6zM12 6l9 6-9 6z"/></svg>
+        <button class="zone z-right" type="button" data-act="next" aria-label="Next song (the whole band)">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 6l8 6-8 6zM11 6l8 6-8 6z"/><rect x="19" y="6" width="2.4" height="12" rx="1"/></svg>
         </button>
-        <button class="zone z-bottom" type="button" data-act="break" aria-label="Take a break or come back">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+        <button class="zone z-bottom" type="button" data-act="break" aria-label="Mute or unmute my part">
+          <svg id="muteIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9.5a3.5 3.5 0 010 5M18.5 7a7 7 0 010 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
-        <button class="zone z-left" type="button" data-act="lower" aria-label="Go lower">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 6l-9 6 9 6zM12 6l-9 6 9 6z"/></svg>
+        <button class="zone z-left" type="button" data-act="prev" aria-label="Previous song (the whole band)">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 6l-8 6 8 6zM13 6l-8 6 8 6z"/><rect x="2.6" y="6" width="2.4" height="12" rx="1"/></svg>
         </button>
         <button id="start" type="button">Start a song</button>
       </div>
@@ -281,30 +285,35 @@
     <h3>Song</h3>
     <div class="song-row">
       <label class="sr" for="song">Song</label><select id="song" aria-label="Song"></select>
-      <label class="sr" for="seed">Seed</label><input id="seed" value="durhack" size="9" aria-label="Seed" />
     </div>
-    <label class="end-row">Style <select id="style" aria-label="Style"><option value="dance">Dance</option><option value="pop">Upbeat pop</option></select></label>
-    <label class="end-row"><input type="checkbox" id="endAfterPass" /> End after one pass</label>
-    <div class="row" style="margin-top:8px"><button id="demoStart" class="pill" type="button">Demo: Murmur</button></div>
+    <div class="song-row">
+      <label class="sr" for="seed">Seed</label><input id="seed" value="" size="12" aria-label="Seed" />
+      <button id="shuffle" class="pill" type="button" aria-label="A random seed">Shuffle</button>
+    </div>
+    <div class="song-row">
+      <label class="end-row">Style <select id="style" aria-label="Style"><option value="dance">Dance</option><option value="pop">Upbeat pop</option></select></label>
+      <label class="end-row"><input type="checkbox" id="endAfterPass" /> End after one pass</label>
+    </div>
     <span id="structure"></span>
+    <p class="menu-hint">Change the song or seed, then press the centre to play it. Enter in the seed box plays it now, for the whole band.</p>
   </div>
 
   <div class="group">
-    <h3>This device</h3>
-    <div><span id="me">…</span> <span id="meRoles"></span></div>
-    <span id="samples"></span>
-    <div class="row" style="margin-top:10px"><button id="record" class="pill" type="button">Record 60 s</button></div>
-  </div>
-
-  <div class="group">
-    <h3>Agents</h3>
-    <div class="agents" id="agents"></div>
+    <details>
+      <summary>Agents</summary>
+      <div class="agents" id="agents"></div>
+    </details>
   </div>
 
   <div class="group">
     <details>
       <summary>Under the hood</summary>
       <div class="hood">
+        <section><h4>This device</h4>
+          <div><span id="me">…</span> <span id="meRoles"></span></div>
+          <span id="samples"></span>
+          <div class="row" style="margin-top:8px"><button id="record" class="pill" type="button">Record 60 s</button> <button id="demoStart" class="pill" type="button">Demo: Murmur</button></div>
+        </section>
         <div id="net"></div>
         <section><h4>Meters</h4><div id="meters" style="font:12px ui-monospace, monospace; color:var(--ink-2)"></div></section>
         <section><h4>Direction (voted by the swarm)</h4><div id="direction"></div></section>

@@ -22,7 +22,11 @@ function makeId() {
 }
 
 export function songWins(a, b) {
-  // Deterministic: the song that started earlier wins; same start -> smaller seed.
+  // Deterministic. A newer generation wins (someone skipped to the next song, went back, or
+  // started a new seed: every device switches); within a generation the song that started
+  // earlier wins (two devices pressing Start at once); same start -> smaller seed.
+  const ga = a.gen ?? 0, gb = b.gen ?? 0;
+  if (ga !== gb) return ga > gb;
   if (a.startMs !== b.startMs) return a.startMs < b.startMs;
   return a.seed < b.seed;
 }
@@ -185,16 +189,19 @@ export class Swarm {
     if (sameSong(song, this.song)) return;
     if (!this.song || songWins(song, this.song)) {
       const had = this.song;
-      this.song = { seed: song.seed, startMs: song.startMs };
-      this.ev.song(this.song, had ? `switched to ${from}'s song (it started earlier)` : `learned the song from ${from}`);
+      this.song = { seed: song.seed, startMs: song.startMs, gen: song.gen ?? 0 };
+      this.ev.song(this.song, had ? (this.song.gen > (had.gen ?? 0) ? `${from} moved the band to a new song` : `switched to ${from}'s song (it started earlier)`) : `learned the song from ${from}`);
       this.publishState();
     }
   }
 
   // ---- local actions ----------------------------------------------------------
 
+  // A new song. While a song is on, it takes the next generation, so it replaces the current song
+  // on every device (songWins); it starts 1.2 s ahead so the others hear about it in time.
   startSong(seed) {
-    this.song = { seed, startMs: this.clock.now() + 400 };
+    const replacing = !!this.song;
+    this.song = { seed, startMs: this.clock.now() + (replacing ? 1200 : 400), gen: replacing ? (this.song.gen ?? 0) + 1 : 0 };
     this.join();
     return this.song;
   }

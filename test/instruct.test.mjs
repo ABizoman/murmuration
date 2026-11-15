@@ -157,3 +157,13 @@ test('a typed "build it up" moves the section energy fully; the LLM only nudges'
   assert.ok(Math.abs(formDirective(form, verse, { energy: 1 }).energy - Math.min(1, base + 0.2)) < 1e-9, 'nudge');
   assert.ok(Math.abs(formDirective(form, verse, { energy: 1 }, 1).energy - Math.min(1, base + 0.5)) < 1e-9, 'a request');
 });
+
+test('songs: a newer generation (next / previous / a new seed) replaces the song everywhere', async () => {
+  const { songWins } = await import('../src/swarm/swarm.js');
+  const old = { seed: 'a', startMs: 1000, gen: 0 };
+  const next = { seed: 'b', startMs: 99999, gen: 1 };
+  assert.equal(songWins(next, old), true, 'later, but a newer generation');
+  assert.equal(songWins(old, next), false);
+  assert.equal(songWins({ seed: 'c', startMs: 500 }, { seed: 'd', startMs: 900 }), true, 'same generation: the earlier start');
+  assert.equal(songWins({ seed: 'c', startMs: 500 }, { seed: 'd', startMs: 900, gen: 2 }), false, 'a missing gen counts as 0');
+});

@@ -27,6 +27,10 @@ const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
 const COLORS = Object.fromEntries(ROLES.map((r) => [r, css.getPropertyValue(`--${r}`).trim()]));
 const LEVELS = ['silent', 'sparse', 'medium', 'busy'];
+// Song choice state (declared first: the swarm can call updateButton/onSong while this file loads)
+let seedEdited = false; // the menu's song/seed was changed: Start plays it as a new song
+const played = []; // the seeds of the songs this device has played, oldest first (for "previous")
+let playedAt = -1; // where "previous" is in that list
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
 const library = createLibrary({ packs: PACK_LOOPS });
@@ -244,19 +248,32 @@ function showStructure(seed) {
   $('structure').textContent = `${s.key} ${s.mode} · ${s.bpm} bpm · ${chords}${s.swing ? ` · swing ${s.swing}` : ''}${s.mood ? ` · ${s.mood}` : ''}${s.end ? ' · ends after one pass' : ''}`;
   return s;
 }
-$('seed').addEventListener('input', () => !swarm.song && showStructure(chosenSeed()));
+// Editing the seed (or the song, style, ending) means "play this next": the centre button then
+// starts it as a new song for everyone instead of joining the old one. Enter plays it right away.
+const randomSeed = () => `durhack-${Math.random().toString(36).slice(2, 6)}`;
+$('seed').addEventListener('input', () => {
+  seedEdited = true;
+  showStructure(chosenSeed());
+  updateButton();
+});
+$('seed').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  playNew(chosenSeed());
+});
 
 // Song picker: "improvise" uses the seed; a song fixes key, tempo, chords and parts.
 $('song').innerHTML = `<option value="">Improvise (from the seed)</option>` +
   Object.values(SONGS).map((s) => `<option value="${esc(s.id)}">${esc(s.title)} — ${esc(s.composer)}</option>`).join('');
 $('song').addEventListener('change', () => {
-  if (swarm.song) return;
   $('seed').disabled = !!$('song').value;
-  // A fresh seed on every page load (new key, tempo and chords each time you start improvising),
-// unless ?seed=<text> asks for one. Type a seed in the Menu to play the same song again.
-$('seed').value = params.get('seed') || `durhack-${Math.random().toString(36).slice(2, 6)}`;
-showStructure(chosenSeed());
+  seedEdited = true;
+  showStructure(chosenSeed());
+  updateButton();
 });
+// A fresh seed on every page load (new key, tempo and chords each time you start improvising),
+// unless ?seed=<text> asks for one. Type a seed in the Menu to play the same song again.
+$('seed').value = params.get('seed') || randomSeed();
 function showSeed(seed) {
   const { base, end, style } = parseSeed(seed);
   const song = songFromSeed(base);
@@ -271,8 +288,21 @@ const chosenSeed = () => {
   const base = song ? songSeed(song) : withStyle($('seed').value.trim() || 'durhack', $('style')?.value);
   return withEnd(base, !!$('endAfterPass')?.checked);
 };
-$('endAfterPass')?.addEventListener('change', () => !swarm.song && showStructure(chosenSeed()));
-$('style')?.addEventListener('change', () => !swarm.song && showStructure(chosenSeed()));
+for (const id of ['endAfterPass', 'style']) {
+  $(id)?.addEventListener('change', () => {
+    seedEdited = true;
+    showStructure(chosenSeed());
+    updateButton();
+  });
+}
+$('shuffle')?.addEventListener('click', () => {
+  $('song').value = '';
+  $('seed').disabled = false;
+  $('seed').value = randomSeed();
+  seedEdited = true;
+  showStructure(chosenSeed());
+  updateButton();
+});
 showStructure(chosenSeed());
 
 function playSong(song) {
@@ -320,28 +350,74 @@ function leaveSong(why = 'left the song (still connected to the swarm)') {
   updateButton();
 }
 
-$('start').addEventListener('click', async () => {
-  if (swarm.playing) return leaveSong();
-  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE, latencyHint: LATENCY }); // needs this click
+async function ensureAudio() {
+  if (!realAudio) realAudio = await createAudio({ onStatus: showSamples, lite: LITE, latencyHint: LATENCY }); // needs a click
   liteIfBusy();
   try { await navigator.wakeLock?.request('screen'); } catch {}
-  if (swarm.song) {
+}
+
+$('start').addEventListener('click', async () => {
+  if (swarm.playing) return leaveSong();
+  await ensureAudio();
+  // Join the song if others are playing it; alone (or after editing the seed) start it afresh.
+  const othersPlaying = swarm.song && swarm.view().peers.some((p) => p.state?.playing && p.state.song?.seed === swarm.song.seed);
+  if (swarm.song && !seedEdited && othersPlaying) {
     log(`<b>joining</b> "${swarm.song.seed}"`);
     swarm.join();
+    playSong(swarm.song);
   } else {
-    swarm.startSong(chosenSeed());
-    log(`<b>started a new song</b> "${swarm.song.seed}"`);
+    return playNew(chosenSeed());
   }
-  playSong(swarm.song);
   preloadVoices();
   updateButton();
 });
 
+// Start `seed` as a new song: for everyone if a song is on (it replaces it on every device), and
+// this device plays it. Used by Start after editing the seed, Enter in the seed box, and the
+// wheel's next / previous buttons.
+async function playNew(seed, { fromHistory = false } = {}) {
+  await ensureAudio();
+  swarm.startSong(seed);
+  seedEdited = false;
+  if (!fromHistory) {
+    played.splice(playedAt + 1);
+    played.push(seed);
+    playedAt = played.length - 1;
+  }
+  log(`<b>started a new song</b> "${esc(seed)}"${swarm.song.gen ? ' (the whole band switches)' : ''}`);
+  playSong(swarm.song);
+  preloadVoices();
+  updateButton();
+}
+// Next: a fresh random seed in the same style (and ending). Previous: the song before.
+function nextSong() {
+  if (playedAt < played.length - 1) {
+    playedAt += 1;
+    return playNew(played[playedAt], { fromHistory: true });
+  }
+  $('song').value = '';
+  $('seed').disabled = false;
+  $('seed').value = randomSeed();
+  return playNew(chosenSeed());
+}
+function prevSong() {
+  if (playedAt <= 0) return false;
+  playedAt -= 1;
+  showSeed(played[playedAt]);
+  playNew(played[playedAt], { fromHistory: true });
+  return true;
+}
+
 function onSong(song, reason) {
   log(`song: ${reason}`);
   showSeed(song.seed);
-  $('seed').disabled = true;
-  $('song').disabled = true;
+  seedEdited = false;
+  // remember it for "previous" (another device may have moved the band on)
+  if (played[playedAt] !== song.seed) {
+    played.splice(playedAt + 1);
+    played.push(song.seed);
+    playedAt = played.length - 1;
+  }
   showStructure(song.seed);
   if (swarm.playing) playSong(song); // switch to the winning song
   updateButton();
@@ -351,6 +427,9 @@ function updateButton() {
   const b = $('start');
   if (swarm.playing) {
     b.textContent = 'Leave';
+    b.disabled = false;
+  } else if (swarm.song && seedEdited) {
+    b.textContent = 'Play this song';
     b.disabled = false;
   } else if (swarm.song) {
     b.textContent = swarm.clock.locked ? 'Join the song' : 'Syncing clock…';
@@ -725,6 +804,7 @@ requestAnimationFrame(frame);
 window.murmuration = {
   swarm, engine, jev, director,
   instruct, // the "Tell your agent" box: ipod/app.js
+  nextSong, prevSong, // the wheel's right and left buttons
   // Read-only hooks for tools/measure-levels.mjs: the master meters and the sample loading state.
   meters: () => (realAudio ? { ...realAudio.meters(), lite: realAudio.isLite() } : null),
   resetMeters: () => realAudio?.resetMeters(),

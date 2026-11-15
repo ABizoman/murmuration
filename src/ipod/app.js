@@ -379,13 +379,17 @@ function press(zone) {
   navigator.vibrate?.(10);
   const act = zone.dataset.act;
   if (act === 'menu') return openSheet(true);
-  if (act === 'higher') return apply('go higher');
-  if (act === 'lower') return apply('go lower');
+  // right / left: next / previous song, for the whole band (main.js)
+  if (act === 'next') { toast('Next song \u2192 the whole band switches', 'good'); return mm()?.nextSong(); }
+  if (act === 'prev') {
+    const went = mm()?.prevSong();
+    return toast(went ? '\u2190 Back to the previous song' : 'No previous song yet', went ? 'good' : 'warn');
+  }
   if (act === 'break') {
     const { engine } = mm();
     const mine = [...engine.myRoles];
     const resting = mine.length && mine.every((r) => !engine.agents[r].auto && engine.agents[r].level === 0);
-    return apply(resting ? 'bring back' : 'take a break');
+    return apply(resting ? 'bring back' : 'take a break'); // "mute" my part (from the next phrase)
   }
 }
 
@@ -463,6 +467,9 @@ function renderStatus() {
   $('instLevel').querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', lvl > i));
   $('instLevel').title = role ? LEVEL_NAMES[lvl] : '';
 
+  // the bottom button mutes my part(s): show a crossed speaker while they rest
+  const muted = mine.length && mine.every((r) => !engine.agents[r].auto && engine.agents[r].level === 0);
+  $('muteIcon')?.classList.toggle('muted', !!muted);
   renderRoom(v, playing);
   watchSwarm(v, engine);
 }

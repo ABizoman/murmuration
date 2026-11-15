@@ -103,6 +103,14 @@ every device that joins knows: after the outro the band plays one last chord tog
 device leaves the song on its own ("the song ended" in the log). Songs can bring their own form
 (sections, see `docs/ADDING_SONGS.md`); songs without one build themselves up as before.
 
+## The wheel
+
+Centre: start / join / leave. Turn it: your part busier or calmer. Top: the menu. **Right / left:
+next / previous song, for the whole band** (next = a fresh random seed in the same style).
+Bottom: mute / unmute your part (it rests from the next phrase). Every page load gets a random
+seed; change the song or seed in the menu and press the centre (or Enter in the seed box) to play
+it as a new song, for everyone (`songWins`: a newer song generation wins over the one playing).
+
 ## Telling the band what to play
 
 The box at the bottom ("Tell your agent what to play") understands, on any device:
